@@ -1,0 +1,64 @@
+{
+  "name": "eye-relax",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows eye rest reminder",
+  "main": "dist/src/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "dev": "npm run build && electron .",
+    "dev:smoke": "npm run build && electron . --smoke",
+    "package:win:dir": "npm run build && electron-builder --win dir --x64",
+    "package:win": "npm run build && electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "com.eyerelax.app",
+    "productName": "护眼提醒",
+    "artifactName": "EyeRelax-${version}-win-x64.${ext}",
+    "asar": true,
+    "compression": "maximum",
+    "publish": null,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/src/**/*",
+      "src/renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "include": "build/installer.nsh",
+      "shortcutName": "护眼提醒",
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "packElevateHelper": false,
+      "uninstallDisplayName": "护眼提醒",
+      "deleteAppDataOnUninstall": true
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2"
+  }
+}

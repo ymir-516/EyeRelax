@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>护眼提醒设置</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      :root {
+        color-scheme: light dark;
+        font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+        --page: #e9f0ed;
+        --surface: #f8fbfa;
+        --surface-muted: #eef5f1;
+        --text: #1d2a26;
+        --muted: #61736c;
+        --accent: #3d8875;
+        --accent-strong: #2e6f5f;
+        --accent-soft: #dceee8;
+        --border: #d4e2dc;
+        --focus: #b47425;
+        --error: #a63f3c;
+        --shadow: 0 14px 34px rgba(42, 74, 64, 0.16);
+      }
+
+      /**
+       * @brief 统一设置页的背景、排版和边缘留白，保持窗口紧凑但不拥挤。
+       */
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        padding: 8px 20px;
+        background:
+          radial-gradient(circle at 88% 0%, rgba(112, 177, 153, 0.2), transparent 34%),
+          linear-gradient(145deg, var(--page), #dfeae5);
+        color: var(--text);
+      }
+
+      main {
+        width: 100%;
+        max-width: 420px;
+        margin: 0 auto;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 8px;
+      }
+
+      .mark {
+        position: relative;
+        display: inline-grid;
+        flex: 0 0 auto;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border-radius: 13px;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .mark::before {
+        content: "";
+        width: 16px;
+        height: 10px;
+        border: 1.5px solid currentColor;
+        border-radius: 100% 0 100% 0;
+        transform: rotate(-45deg);
+      }
+
+      .mark::after {
+        content: "";
+        position: absolute;
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .eyebrow {
+        margin: 0 0 2px;
+        color: var(--accent-strong);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--text);
+        font-size: 23px;
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+      }
+
+      .settings-form {
+        display: grid;
+        gap: 8px;
+      }
+
+      .panel {
+        padding: 9px 14px;
+        border: 1px solid var(--border);
+        border-radius: 15px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .panel-heading {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 12px;
+        margin-bottom: 6px;
+      }
+
+      .panel-heading > div {
+        min-width: 0;
+      }
+
+      .panel-title {
+        margin: 0;
+        color: var(--text);
+        font-size: 15px;
+        line-height: 1.3;
+      }
+
+      .panel-description {
+        margin: 3px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .panel-icon {
+        display: inline-grid;
+        flex: 0 0 auto;
+        width: 26px;
+        height: 26px;
+        place-items: center;
+        border-radius: 9px;
+        background: var(--surface-muted);
+        color: var(--accent);
+        font-size: 15px;
+      }
+
+      .panel-icon::before {
+        content: "◷";
+      }
+
+      .panel-icon.startup-icon::before {
+        content: "↗";
+      }
+
+      .field-row,
+      .switch-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .field-row > div:first-child,
+      .switch-row > span:first-child {
+        min-width: 0;
+      }
+
+      .field-label,
+      .switch-title {
+        display: block;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .hint {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .input-shell {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-width: 100px;
+        padding: 3px 9px 3px 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface-muted);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      input[type="number"] {
+        box-sizing: border-box;
+        width: 48px;
+        min-height: 32px;
+        padding: 4px 2px;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 15px;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        margin: 0;
+      }
+
+      .switch-row {
+        cursor: pointer;
+      }
+
+      input[type="checkbox"] {
+        flex: 0 0 auto;
+        width: 21px;
+        height: 21px;
+        margin: 0;
+        accent-color: var(--accent);
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        min-height: 40px;
+        padding: 2px 2px 0;
+      }
+
+      button {
+        min-width: 112px;
+        min-height: 40px;
+        padding: 8px 16px;
+        border: 1px solid transparent;
+        border-radius: 11px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+        color: #ffffff;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 7px 16px rgba(49, 117, 98, 0.22);
+        transition: transform 140ms ease, box-shadow 140ms ease;
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 9px 20px rgba(49, 117, 98, 0.28);
+      }
+
+      button:focus-visible,
+      input:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 2px;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
+
+      .message {
+        flex: 1 1 auto;
+        min-height: 1.5em;
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
+      .message.error {
+        color: var(--error);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #111b18;
+          --surface: #1a2723;
+          --surface-muted: #21332d;
+          --text: #e5efea;
+          --muted: #a8bbb3;
+          --accent: #79c4aa;
+          --accent-strong: #9ad7bf;
+          --accent-soft: #24463b;
+          --border: #345148;
+          --focus: #e5b267;
+          --error: #ffb4ab;
+          --shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+        }
+
+        body {
+          background:
+            radial-gradient(circle at 88% 0%, rgba(68, 127, 105, 0.2), transparent 34%),
+            linear-gradient(145deg, var(--page), #15231f);
+        }
+
+        button {
+          color: #10221c;
+        }
+      }
+
+      @media (forced-colors: active) {
+        .panel {
+          border-color: CanvasText;
+          background: Canvas;
+          box-shadow: none;
+        }
+
+        .panel-icon,
+        .input-shell {
+          border: 1px solid ButtonText;
+          background: ButtonFace;
+          color: ButtonText;
+        }
+
+        button {
+          border-color: ButtonText;
+          background: Highlight;
+          color: HighlightText;
+          box-shadow: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        button {
+          transition: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        main {
+          animation: page-in 180ms ease-out both;
+        }
+
+        @keyframes page-in {
+          from {
+            opacity: 0;
+            transform: translateY(5px);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <span class="mark" aria-hidden="true"></span>
+        <div>
+          <p class="eyebrow">护眼提醒</p>
+          <h1>设置</h1>
+        </div>
+      </header>
+      <form id="settings-form" class="settings-form" novalidate>
+        <section class="panel" aria-labelledby="rhythm-title">
+          <div class="panel-heading">
+            <div>
+              <h2 id="rhythm-title" class="panel-title">提醒节奏</h2>
+              <p class="panel-description">调整推迟提醒的时间长度。</p>
+            </div>
+            <span class="panel-icon" aria-hidden="true"></span>
+          </div>
+          <div class="field-row">
+            <div>
+              <label class="field-label" for="snooze-minutes">推迟提醒时间</label>
+              <p id="snooze-hint" class="hint">请输入 1～10 之间的整数，默认 3 分钟。</p>
+            </div>
+            <div class="input-shell">
+              <input
+                id="snooze-minutes"
+                name="snoozeMinutes"
+                type="number"
+                min="1"
+                max="10"
+                step="1"
+                inputmode="numeric"
+                value="3"
+                required
+                aria-describedby="snooze-hint"
+              >
+              <span>分钟</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="startup-title">
+          <div class="panel-heading">
+            <div>
+              <h2 id="startup-title" class="panel-title">启动行为</h2>
+              <p class="panel-description">登录 Windows 后在后台运行。</p>
+            </div>
+            <span class="panel-icon startup-icon" aria-hidden="true"></span>
+          </div>
+          <label class="switch-row" for="auto-start">
+            <span>
+              <span class="switch-title">开机自动启动护眼提醒</span>
+              <span class="hint">只作用于当前 Windows 用户。</span>
+            </span>
+            <input id="auto-start" name="autoStart" type="checkbox" checked>
+          </label>
+        </section>
+
+        <div class="actions">
+          <p id="message" class="message" role="status" aria-live="polite"></p>
+          <button id="save" type="submit">保存设置</button>
+        </div>
+      </form>
+    </main>
+    <script>
+      const DEFAULT_SNOOZE_MINUTES = 3;
+      const MIN_SNOOZE_MINUTES = 1;
+      const MAX_SNOOZE_MINUTES = 10;
+      const form = document.getElementById("settings-form");
+      const snoozeMinutesInput = document.getElementById("snooze-minutes");
+      const autoStartInput = document.getElementById("auto-start");
+      const saveButton = document.getElementById("save");
+      const message = document.getElementById("message");
+
+      /**
+       * @brief 从本地页面查询参数读取启动时设置，避免页面加载时闪烁空值。
+       */
+      function readInitialSettings() {
+        const query = new URLSearchParams(window.location.search);
+        const snoozeMinutes = Number(query.get("snoozeMinutes"));
+        const autoStart = query.get("autoStart");
+
+        return {
+          snoozeMinutes: Number.isInteger(snoozeMinutes) &&
+            snoozeMinutes >= MIN_SNOOZE_MINUTES &&
+            snoozeMinutes <= MAX_SNOOZE_MINUTES
+            ? snoozeMinutes
+            : DEFAULT_SNOOZE_MINUTES,
+          autoStart: autoStart !== "false"
+        };
+      }
+
+      /**
+       * @brief 将主进程返回的设置填入表单。
+       */
+      function applySettings(settings) {
+        snoozeMinutesInput.value = String(settings.snoozeMinutes);
+        autoStartInput.checked = settings.autoStart;
+      }
+
+      /**
+       * @brief 在页面上显示保存或加载结果。
+       */
+      function showMessage(text, isError = false) {
+        message.textContent = text;
+        message.classList.toggle("error", isError);
+      }
+
+      /**
+       * @brief 在主进程再次校验前执行即时输入校验。
+       */
+      function readFormSettings() {
+        const snoozeMinutes = Number(snoozeMinutesInput.value);
+        if (!Number.isInteger(snoozeMinutes) ||
+            snoozeMinutes < MIN_SNOOZE_MINUTES ||
+            snoozeMinutes > MAX_SNOOZE_MINUTES) {
+          showMessage("推迟时间必须是 1～10 之间的整数。", true);
+          snoozeMinutesInput.focus();
+          return undefined;
+        }
+
+        return {
+          snoozeMinutes,
+          autoStart: autoStartInput.checked
+        };
+      }
+
+      /**
+       * @brief 读取最新设置，覆盖页面加载时的查询参数快照。
+       */
+      async function loadSettings() {
+        saveButton.disabled = true;
+        try {
+          applySettings(await window.electronApi.loadSettings());
+        } catch {
+          showMessage("读取设置失败，当前显示默认值。", true);
+        } finally {
+          saveButton.disabled = false;
+        }
+      }
+
+      /**
+       * @brief 提交设置并等待主进程持久化及开机自启同步。
+       */
+      async function saveSettings(event) {
+        event.preventDefault();
+        const settings = readFormSettings();
+        if (settings === undefined)
+          return;
+
+        saveButton.disabled = true;
+        showMessage("正在保存…");
+        try {
+          const savedSettings = await window.electronApi.saveSettings(settings);
+          applySettings(savedSettings);
+          showMessage("设置已保存。");
+        } catch {
+          showMessage("保存失败，请检查输入后重试。", true);
+        } finally {
+          saveButton.disabled = false;
+        }
+      }
+
+      applySettings(readInitialSettings());
+      form.addEventListener("submit", saveSettings);
+      void loadSettings();
+    </script>
+  </body>
+</html>

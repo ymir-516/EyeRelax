@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>护眼提醒</title>
+    <!-- @brief 提供最小基线窗口的可见布局，便于人工确认 WSLg 显示链路。 -->
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      main {
+        width: 320px;
+        text-align: center;
+      }
+
+      h1 {
+        margin: 0 0 16px;
+        font-size: 24px;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>护眼提醒</h1>
+      <p>Linux Electron 基线运行中。</p>
+    </main>
+  </body>
+</html>

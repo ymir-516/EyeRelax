@@ -1,0 +1,42 @@
+# 依赖目录
+node_modules/
+
+# TypeScript、Electron 和发布构建输出
+dist/
+release/
+out/
+*.tsbuildinfo
+
+# 测试覆盖率和测试工具缓存
+coverage/
+.nyc_output/
+
+# 本地缓存与临时文件
+.cache/
+.tmp/
+*.tmp
+*.temp
+
+# 日志
+*.log
+
+# 本地环境配置和签名证书
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+
+# Codex/代理产生的本地工作区元数据
+.agents/
+.codex/
+
+# 操作系统杂项
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# 编辑器临时文件
+*.swp
+*.swo
+*~
