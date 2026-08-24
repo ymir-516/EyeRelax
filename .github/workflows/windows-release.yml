@@ -1,0 +1,62 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Windows installer
+        run: npm run package:win
+
+      - name: Verify installer and generate checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter "EyeRelax-*-win-x64.exe" -File |
+            Select-Object -First 1
+
+          if ($null -eq $installer) {
+            throw "Installer not found"
+          }
+
+          if ($installer.Length -lt (50 * 1MB)) {
+            throw "Installer is unexpectedly small: $($installer.Length) bytes"
+          }
+
+          $hash = Get-FileHash -Path $installer.FullName -Algorithm SHA256
+          "$($hash.Hash)  $($installer.Name)" |
+            Set-Content -Path "release/SHA256SUMS.txt" -Encoding ascii
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release/EyeRelax-*-win-x64.exe
+            release/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
