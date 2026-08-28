@@ -557,6 +557,8 @@ class FakeTrayHost implements TrayHost
 class FakeTrayScheduler implements TrayScheduler
 {
   state: ReminderStateValue = ReminderState.Waiting;
+  remainingMilliseconds: number | undefined = 20 * MILLISECONDS_PER_MINUTE;
+  systemPaused = false;
   readonly commands: ReminderCommand[] = [];
 
   /**
@@ -565,6 +567,22 @@ class FakeTrayScheduler implements TrayScheduler
   getState(): ReminderStateValue
   {
     return this.state;
+  }
+
+  /**
+   * @brief 返回内存调度器中的下次提醒剩余时间。
+   */
+  getNextReminderRemainingMilliseconds(): number | undefined
+  {
+    return this.remainingMilliseconds;
+  }
+
+  /**
+   * @brief 返回内存调度器中的系统暂停状态。
+   */
+  isSystemPaused(): boolean
+  {
+    return this.systemPaused;
   }
 
   /**
@@ -614,11 +632,14 @@ function verifyTrayController(): void
 {
   const host = new FakeTrayHost();
   const scheduler = new FakeTrayScheduler();
+  const clock = new IntegrationClock();
+  const timerScheduler = new IntegrationTimerScheduler(clock);
   let settingsOpenCount = 0;
   let quitCount = 0;
   const controller = new TrayController({
     host,
     scheduler,
+    timerScheduler,
     openSettings: (): void => {
       settingsOpenCount += 1;
     },
@@ -631,8 +652,18 @@ function verifyTrayController(): void
   controller.start();
   assert.equal(host.createCount, 1);
   assert.equal(host.tray.visualState, "running");
-  assert.equal(host.tray.toolTip, "护眼提醒 - 运行中");
+  assert.equal(host.tray.toolTip, "护眼提醒 - 下次提醒：20:00 后");
   assert.equal(findTrayMenuItem(host.latestTemplate(), "状态：运行中").enabled, false);
+
+  scheduler.remainingMilliseconds = 4 * MILLISECONDS_PER_MINUTE + 1;
+  clock.advance(1000);
+  timerScheduler.runDue();
+  assert.equal(host.tray.toolTip, "护眼提醒 - 下次提醒：04:01 后");
+
+  scheduler.systemPaused = true;
+  controller.refresh();
+  assert.equal(host.tray.toolTip, "护眼提醒 - 系统暂停 - 下次提醒：04:01 后");
+  scheduler.systemPaused = false;
 
   findTrayMenuItem(host.latestTemplate(), "立即提醒").click?.();
   assert.deepEqual(scheduler.commands, [
@@ -665,6 +696,7 @@ function verifyTrayController(): void
   controller.stop();
   controller.stop();
   assert.equal(host.tray.destroyCount, 1);
+  assert.equal(timerScheduler.pendingTimerCount(), 0);
   assert.equal(controller.isStarted(), false);
 }
 
@@ -1186,6 +1218,7 @@ interface ApplicationIntegrationFixture
 {
   clock: IntegrationClock;
   timers: IntegrationTimerScheduler;
+  trayTimers: IntegrationTimerScheduler;
   settings: ReminderSettings;
   scheduler: ReminderScheduler;
   reminderHost: FakeReminderWindowHost;
@@ -1205,6 +1238,7 @@ function createApplicationIntegrationFixture(): ApplicationIntegrationFixture
 {
   const clock = new IntegrationClock();
   const timers = new IntegrationTimerScheduler(clock);
+  const trayTimers = new IntegrationTimerScheduler(clock);
   const settings: ReminderSettings = { ...DEFAULT_SETTINGS };
   const reminderHost = new FakeReminderWindowHost();
   const trayHost = new FakeTrayHost();
@@ -1247,6 +1281,7 @@ function createApplicationIntegrationFixture(): ApplicationIntegrationFixture
   trayController = new TrayController({
     host: trayHost,
     scheduler,
+    timerScheduler: trayTimers,
     openSettings: (): void => settingsController.show(),
     quit: (): void => undefined
   });
@@ -1262,6 +1297,7 @@ function createApplicationIntegrationFixture(): ApplicationIntegrationFixture
   return {
     clock,
     timers,
+    trayTimers,
     settings,
     scheduler,
     reminderHost,
@@ -1377,6 +1413,7 @@ function verifyApplicationIntegrationFlow(): void
   fixture.trayController.stop();
   assert.equal(fixture.powerHost.listenerCount(), 0);
   assert.equal(fixture.trayHost.tray.destroyCount, 1);
+  assert.equal(fixture.trayTimers.pendingTimerCount(), 0);
   assert.equal(fixture.reminderHost.windows[0].destroyCount, 1);
   assert.equal(fixture.settingsHost.windows[0].destroyCount, 1);
 }

@@ -250,9 +250,14 @@ function verifyNormalReminderCycle(): void
   assert.equal(fixture.scheduler.start(), true);
   assert.equal(fixture.scheduler.start(), false);
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    REMINDER_INTERVAL_MILLISECONDS
+  );
   fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
   fixture.timerScheduler.runDue();
   assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
+  assert.equal(fixture.scheduler.getNextReminderRemainingMilliseconds(), undefined);
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
   assert.deepEqual(fixture.events, [
     { type: ReminderOutputEventType.Show }
@@ -263,6 +268,10 @@ function verifyNormalReminderCycle(): void
     true
   );
   assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    REMINDER_INTERVAL_MILLISECONDS
+  );
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
   assert.deepEqual(fixture.events, [
     { type: ReminderOutputEventType.Show },
@@ -297,6 +306,10 @@ function verifySnoozeAndRepeatedSnooze(): void
     true
   );
   assert.equal(fixture.scheduler.getState(), ReminderState.Snoozed);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    snoozeMilliseconds
+  );
 
   fixture.clock.advance(snoozeMilliseconds - 1);
   fixture.timerScheduler.runDue();
@@ -305,6 +318,7 @@ function verifySnoozeAndRepeatedSnooze(): void
   fixture.clock.advance(1);
   fixture.timerScheduler.runDue();
   assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
+  assert.equal(fixture.scheduler.getNextReminderRemainingMilliseconds(), undefined);
 
   assert.equal(
     fixture.scheduler.dispatch({ type: ReminderCommandType.Snooze }),
@@ -354,16 +368,33 @@ function verifySystemPauseKeepsWaitingRemainder(): void
   const fixture = createSchedulerFixture();
 
   fixture.scheduler.start();
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    REMINDER_INTERVAL_MILLISECONDS
+  );
   fixture.clock.advance(5 * MILLISECONDS_PER_MINUTE);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    15 * MILLISECONDS_PER_MINUTE
+  );
   assert.equal(
     fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.UserLocked }),
     true
+  );
+  assert.equal(fixture.scheduler.isSystemPaused(), true);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    15 * MILLISECONDS_PER_MINUTE
   );
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
 
   fixture.clock.advance(30 * MILLISECONDS_PER_MINUTE);
   fixture.timerScheduler.runDue();
   assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    15 * MILLISECONDS_PER_MINUTE
+  );
   assert.deepEqual(fixture.events, []);
 
   assert.equal(
@@ -384,6 +415,10 @@ function verifySystemPauseKeepsWaitingRemainder(): void
     true
   );
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    15 * MILLISECONDS_PER_MINUTE
+  );
 
   fixture.clock.advance(15 * MILLISECONDS_PER_MINUTE - 1);
   fixture.timerScheduler.runDue();
@@ -506,6 +541,7 @@ function verifyPauseAndResume(): void
     true
   );
   assert.equal(fixture.scheduler.getState(), ReminderState.Paused);
+  assert.equal(fixture.scheduler.getNextReminderRemainingMilliseconds(), undefined);
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
 
   fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
@@ -518,6 +554,10 @@ function verifyPauseAndResume(): void
     true
   );
   assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    REMINDER_INTERVAL_MILLISECONDS
+  );
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
 
   fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS - 1);

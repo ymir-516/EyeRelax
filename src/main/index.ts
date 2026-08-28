@@ -516,6 +516,7 @@ function stopSystemEvents(): void
 function startScheduler(): void
 {
   reminderScheduler.start();
+  trayController.refresh();
 }
 
 /**
@@ -524,6 +525,7 @@ function startScheduler(): void
 function stopScheduler(): void
 {
   reminderScheduler.stop();
+  trayController.refresh();
 }
 
 /**
@@ -797,6 +799,7 @@ const systemEventMonitor = new SystemEventMonitor(
 const trayController = new TrayController({
   host: electronTrayHost,
   scheduler: reminderScheduler,
+  timerScheduler: runtimeTimerScheduler,
   openSettings: openSettingsWindow,
   quit: (): void => app.quit()
 });

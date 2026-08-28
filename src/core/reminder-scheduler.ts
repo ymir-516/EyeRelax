@@ -75,6 +75,20 @@ export class ReminderScheduler
   }
 
   /**
+   * @brief 获取下次提醒的剩余毫秒数。
+   *
+   * 使用调度器的单调时钟作为唯一时间来源，系统暂停期间返回冻结的剩余时间。
+   * @return 下次提醒的剩余毫秒数；没有待处理提醒时返回 undefined。
+   */
+  getNextReminderRemainingMilliseconds(): number | undefined
+  {
+    if (this.activeDeadlineMilliseconds !== undefined)
+      return Math.max(0, this.activeDeadlineMilliseconds - this.options.clock.now());
+
+    return this.pausedRemainingMilliseconds;
+  }
+
+  /**
    * @brief 启动首次 20 分钟等待。
    *
    * 重复启动不会创建第二个计时器，避免应用入口重复初始化导致提醒加速。
@@ -302,7 +316,7 @@ export class ReminderScheduler
   /**
    * @brief 返回是否存在任一锁屏或睡眠暂停原因。
    */
-  private isSystemPaused(): boolean
+  isSystemPaused(): boolean
   {
     return this.userLocked || this.systemSuspended;
   }
