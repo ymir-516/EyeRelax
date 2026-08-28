@@ -29,3 +29,23 @@ function verifySandboxPreloadIsSelfContained(): void
 }
 
 test("sandbox preload remains self-contained", verifySandboxPreloadIsSelfContained);
+
+/**
+ * @brief 确认提醒页面不会通过全局键盘事件或自动聚焦隐式触发提醒操作。
+ */
+function verifyReminderPageDoesNotUseImplicitKeyboardActions(): void
+{
+  const reminderPath = join(process.cwd(), "src", "renderer", "reminder.html");
+  const reminderSource = readFileSync(reminderPath, "utf8");
+
+  assert.doesNotMatch(
+    reminderSource,
+    /document\.addEventListener\(\s*["']keydown["']/
+  );
+  assert.doesNotMatch(reminderSource, /completeButton\.focus\(\)/);
+}
+
+test(
+  "reminder page does not use implicit keyboard actions",
+  verifyReminderPageDoesNotUseImplicitKeyboardActions
+);

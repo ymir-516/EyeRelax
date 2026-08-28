@@ -396,23 +396,6 @@
         void snoozeReminder();
       });
 
-      /**
-       * @brief 保证键盘行为只允许完成动作和按钮间自然切换。
-       */
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
-
-        if (event.key === "Enter") {
-          event.preventDefault();
-          void completeReminder();
-        }
-      });
-
-      completeButton.focus();
     </script>
   </body>
 </html>
