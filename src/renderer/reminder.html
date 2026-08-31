@@ -294,11 +294,11 @@
       <header class="reminder-header">
         <span class="mark" aria-hidden="true"></span>
         <div class="title-group">
-          <p class="eyebrow">短暂离屏</p>
-          <h1>眼睛休息提醒</h1>
+          <p id="eyebrow" class="eyebrow">短暂离屏</p>
+          <h1 id="title">眼睛休息提醒</h1>
         </div>
       </header>
-      <p class="message">请眺望约 6 米（20 英尺）外至少 20 秒，让眼睛休息一下。</p>
+      <p id="message" class="message">请眺望约 6 米（20 英尺）外至少 20 秒，让眼睛休息一下。</p>
       <p id="action-status" class="action-status" role="status" aria-live="polite"></p>
       <div class="actions">
         <button id="complete" type="button">已休息</button>
@@ -309,10 +309,26 @@
       const DEFAULT_SNOOZE_MINUTES = 3;
       const MIN_SNOOZE_MINUTES = 1;
       const MAX_SNOOZE_MINUTES = 10;
+      const REMINDER_TYPE_EYE_REST = "eye-rest";
+      const REMINDER_TYPE_STANDING = "standing";
+      const eyebrow = document.getElementById("eyebrow");
+      const title = document.getElementById("title");
+      const message = document.getElementById("message");
       const completeButton = document.getElementById("complete");
       const snoozeButton = document.getElementById("snooze");
       const actionStatus = document.getElementById("action-status");
       let actionInProgress = false;
+
+      /**
+       * @brief 读取并校验当前弹窗的提醒类型。
+       */
+      function readReminderType() {
+        const value = new URLSearchParams(window.location.search).get("reminderType");
+        if (value === REMINDER_TYPE_STANDING)
+          return REMINDER_TYPE_STANDING;
+
+        return REMINDER_TYPE_EYE_REST;
+      }
 
       /**
        * @brief 从主进程传入的查询参数读取推迟分钟数。
@@ -378,14 +394,29 @@
        * @brief 提交已休息动作。
        */
       function completeReminder() {
-        return dispatchReminderAction(() => window.electronApi.completeReminder());
+        return dispatchReminderAction(() => {
+          return window.electronApi.completeReminder(reminderType);
+        });
       }
 
       /**
        * @brief 提交推迟动作。
        */
       function snoozeReminder() {
-        return dispatchReminderAction(() => window.electronApi.snoozeReminder());
+        return dispatchReminderAction(() => {
+          return window.electronApi.snoozeReminder(reminderType);
+        });
+      }
+
+      /**
+       * @brief 根据提醒类型切换站立弹窗的文案和完成按钮。
+       */
+      const reminderType = readReminderType();
+      if (reminderType === REMINDER_TYPE_STANDING) {
+        eyebrow.textContent = "健康提醒";
+        title.textContent = "站立提醒";
+        message.textContent = "请起身站立并活动片刻，让身体放松一下。";
+        completeButton.textContent = "已站立";
       }
 
       snoozeButton.textContent = `推迟 ${readSnoozeMinutes()} 分钟`;

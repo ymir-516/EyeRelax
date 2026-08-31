@@ -5,6 +5,7 @@ import {
   ReminderCommandType,
   ReminderOutputEventType,
   ReminderState,
+  ReminderType,
   SystemEventType,
   type ReminderCommand,
   type ReminderOutputEvent,
@@ -19,18 +20,19 @@ import {
 } from "../src/core/clock.js";
 import {
   REMINDER_INTERVAL_MILLISECONDS,
+  STANDING_REMINDER_INTERVAL_MILLISECONDS,
   ReminderScheduler
 } from "../src/core/reminder-scheduler.js";
 
 /**
- * @brief 提供测试可以手动推进的单调时间替身。
+ * @brief 可手动推进的单调时钟。
  */
 class ManualClock implements MonotonicClock
 {
   private currentMilliseconds = 0;
 
   /**
-   * @brief 返回当前测试时间。
+   * @brief 返回当前单调时间。
    */
   now(): number
   {
@@ -38,7 +40,7 @@ class ManualClock implements MonotonicClock
   }
 
   /**
-   * @brief 将测试时间向前推进指定毫秒数。
+   * @brief 向前推进时钟。
    */
   advance(milliseconds: number): void
   {
@@ -47,8 +49,10 @@ class ManualClock implements MonotonicClock
   }
 }
 
-interface ScheduledTimer
-{
+/**
+ * @brief 手动计时器的内部记录。
+ */
+interface ScheduledTimer {
   dueAt: number;
   callback: () => void;
   cancelled: boolean;
@@ -56,26 +60,25 @@ interface ScheduledTimer
 }
 
 /**
- * @brief 提供测试可以手动触发到期回调的一次性计时器替身。
+ * @brief 仅在测试显式调用时执行到期回调的计时器调度器。
  */
 class ManualTimerScheduler implements OneShotTimerScheduler
 {
   private readonly timers: ScheduledTimer[] = [];
 
   /**
-   * @brief 创建一个由测试时间控制的一次性计时器。
+   * @brief 创建手动计时器调度器。
    */
   constructor(private readonly clock: MonotonicClock)
   {
   }
 
   /**
-   * @brief 记录计时器，实际回调由 runDue 手动触发。
+   * @brief 注册一条单次计时器。
    */
   schedule(delayMilliseconds: number, callback: () => void): OneShotTimer
   {
     assert.ok(delayMilliseconds >= 0);
-
     const timer: ScheduledTimer = {
       dueAt: this.clock.now() + delayMilliseconds,
       callback,
@@ -96,12 +99,11 @@ class ManualTimerScheduler implements OneShotTimerScheduler
   }
 
   /**
-   * @brief 触发当前测试时间已经到期的计时器。
+   * @brief 执行当前时刻已经到期的计时器。
    */
   runDue(): void
   {
     const now = this.clock.now();
-
     for (const timer of this.timers) {
       if (!timer.cancelled && !timer.fired && timer.dueAt <= now) {
         timer.fired = true;
@@ -111,7 +113,7 @@ class ManualTimerScheduler implements OneShotTimerScheduler
   }
 
   /**
-   * @brief 返回当前尚未完成或取消的测试计时器数量。
+   * @brief 返回尚未取消或执行的计时器数量。
    */
   pendingTimerCount(): number
   {
@@ -120,7 +122,7 @@ class ManualTimerScheduler implements OneShotTimerScheduler
 }
 
 /**
- * @brief 组合调度器测试所需的可控时钟、计时器和输出事件。
+ * @brief 核心调度器测试夹具。
  */
 interface SchedulerFixture
 {
@@ -132,7 +134,7 @@ interface SchedulerFixture
 }
 
 /**
- * @brief 创建不依赖真实时间和 Electron 的调度器测试夹具。
+ * @brief 创建使用手动时钟的调度器测试夹具。
  */
 function createSchedulerFixture(): SchedulerFixture
 {
@@ -159,7 +161,7 @@ function createSchedulerFixture(): SchedulerFixture
 }
 
 /**
- * @brief 验证 T02 定义的状态、命令、输出事件和系统事件可以表达需求边界。
+ * @brief 验证核心模型包含双轨状态和类型化操作。
  */
 function verifyCoreModel(): void
 {
@@ -167,24 +169,38 @@ function verifyCoreModel(): void
     "waiting",
     "reminder-visible",
     "snoozed",
+    "queued",
     "paused"
   ]);
+  assert.deepEqual(Object.values(ReminderType), ["eye-rest", "standing"]);
   assert.deepEqual(DEFAULT_SETTINGS, {
     snoozeMinutes: 3,
     autoStart: true
   });
 
   const commands: ReminderCommand[] = [
-    { type: ReminderCommandType.Complete },
-    { type: ReminderCommandType.Snooze },
+    {
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    },
+    {
+      type: ReminderCommandType.Snooze,
+      reminderType: ReminderType.Standing
+    },
     { type: ReminderCommandType.RemindNow },
     { type: ReminderCommandType.Pause },
     { type: ReminderCommandType.Resume }
   ];
   const outputEvents: ReminderOutputEvent[] = [
-    { type: ReminderOutputEventType.Show },
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    },
     { type: ReminderOutputEventType.Hide },
-    { type: ReminderOutputEventType.BringToFront }
+    {
+      type: ReminderOutputEventType.BringToFront,
+      reminderType: ReminderType.Standing
+    }
   ];
   const systemEvents: SystemEvent[] = [
     { type: SystemEventType.UserLocked },
@@ -199,210 +215,225 @@ function verifyCoreModel(): void
 }
 
 /**
- * @brief 验证测试可以推进 20 分钟而无需真实等待，并且计时器只触发一次。
+ * @brief 验证启动后两条轨道拥有独立的正常周期。
  */
-function verifyManualTimeProgression(): void
-{
-  const clock = new ManualClock();
-  const scheduler = new ManualTimerScheduler(clock);
-  let firedCount = 0;
-
-  scheduler.schedule(20 * MILLISECONDS_PER_MINUTE, () => {
-    firedCount += 1;
-  });
-
-  clock.advance(20 * MILLISECONDS_PER_MINUTE - 1);
-  scheduler.runDue();
-  assert.equal(firedCount, 0);
-
-  clock.advance(1);
-  scheduler.runDue();
-  scheduler.runDue();
-  assert.equal(firedCount, 1);
-}
-
-/**
- * @brief 验证取消计时器后推进时间不会触发其回调。
- */
-function verifyTimerCancellation(): void
-{
-  const clock = new ManualClock();
-  const scheduler = new ManualTimerScheduler(clock);
-  let fired = false;
-  const timer = scheduler.schedule(1000, () => {
-    fired = true;
-  });
-
-  timer.cancel();
-  clock.advance(1000);
-  scheduler.runDue();
-
-  assert.equal(fired, false);
-}
-
-/**
- * @brief 验证首次提醒、已休息和下一个正常周期的状态转换。
- */
-function verifyNormalReminderCycle(): void
+function verifyIndependentReminderCycles(): void
 {
   const fixture = createSchedulerFixture();
 
   assert.equal(fixture.scheduler.start(), true);
   assert.equal(fixture.scheduler.start(), false);
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
+  assert.equal(fixture.timerScheduler.pendingTimerCount(), 2);
   assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
     REMINDER_INTERVAL_MILLISECONDS
   );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    STANDING_REMINDER_INTERVAL_MILLISECONDS
+  );
+
   fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
   fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-  assert.equal(fixture.scheduler.getNextReminderRemainingMilliseconds(), undefined);
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.EyeRest),
+    ReminderState.ReminderVisible
+  );
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.Standing),
+    ReminderState.Waiting
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    10 * MILLISECONDS_PER_MINUTE
+  );
   assert.deepEqual(fixture.events, [
-    { type: ReminderOutputEventType.Show }
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    }
   ]);
 
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Complete }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
   assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
     REMINDER_INTERVAL_MILLISECONDS
   );
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
-  assert.deepEqual(fixture.events, [
-    { type: ReminderOutputEventType.Show },
-    { type: ReminderOutputEventType.Hide }
-  ]);
+  assert.equal(fixture.timerScheduler.pendingTimerCount(), 2);
 
-  fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
+  fixture.clock.advance(10 * MILLISECONDS_PER_MINUTE);
   fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.Standing),
+    ReminderState.ReminderVisible
+  );
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.EyeRest),
+    ReminderState.Waiting
+  );
   assert.deepEqual(fixture.events, [
-    { type: ReminderOutputEventType.Show },
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    },
     { type: ReminderOutputEventType.Hide },
-    { type: ReminderOutputEventType.Show }
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.Standing
+    }
   ]);
 }
 
 /**
- * @brief 验证推迟、重复推迟不会被当作已休息，并按设置重新提醒。
+ * @brief 验证完成和延迟只重置当前提醒类型。
  */
-function verifySnoozeAndRepeatedSnooze(): void
+function verifyActionsRemainIndependent(): void
 {
   const fixture = createSchedulerFixture();
-  const snoozeMilliseconds = DEFAULT_SETTINGS.snoozeMinutes *
-    MILLISECONDS_PER_MINUTE;
-
   fixture.scheduler.start();
-  fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
-  fixture.timerScheduler.runDue();
 
+  fixture.clock.advance(30 * MILLISECONDS_PER_MINUTE);
+  fixture.timerScheduler.runDue();
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Snooze }),
-    true
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
   );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Snoozed);
-  assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
-    snoozeMilliseconds
-  );
-
-  fixture.clock.advance(snoozeMilliseconds - 1);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Snoozed);
-
-  fixture.clock.advance(1);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-  assert.equal(fixture.scheduler.getNextReminderRemainingMilliseconds(), undefined);
-
-  assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Snooze }),
-    true
-  );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Snoozed);
-
-  fixture.clock.advance(snoozeMilliseconds);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-  assert.deepEqual(fixture.events, [
-    { type: ReminderOutputEventType.Show },
-    { type: ReminderOutputEventType.Hide },
-    { type: ReminderOutputEventType.Show },
-    { type: ReminderOutputEventType.Hide },
-    { type: ReminderOutputEventType.Show }
+  assert.deepEqual(fixture.scheduler.getPendingReminderTypes(), [
+    ReminderType.Standing
   ]);
-}
 
-/**
- * @brief 验证修改设置不会改变已经开始的推迟倒计时。
- */
-function verifySettingsChangeDoesNotResetSnooze(): void
-{
-  const fixture = createSchedulerFixture();
-
-  fixture.scheduler.start();
-  fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
-  fixture.timerScheduler.runDue();
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Snooze }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.Standing
+    }),
+    false
+  );
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
-
-  fixture.settings.snoozeMinutes = 10;
-  fixture.clock.advance(DEFAULT_SETTINGS.snoozeMinutes * MILLISECONDS_PER_MINUTE);
-  fixture.timerScheduler.runDue();
-
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-}
-
-/**
- * @brief 验证锁屏和睡眠期间不消耗 Waiting 状态的剩余时间。
- */
-function verifySystemPauseKeepsWaitingRemainder(): void
-{
-  const fixture = createSchedulerFixture();
-
-  fixture.scheduler.start();
   assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
+  );
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.EyeRest),
+    ReminderState.Waiting
+  );
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.Standing),
+    ReminderState.ReminderVisible
+  );
+
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Snooze,
+      reminderType: ReminderType.Standing
+    }),
+    true
+  );
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.Standing),
+    ReminderState.Snoozed
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
     REMINDER_INTERVAL_MILLISECONDS
   );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    DEFAULT_SETTINGS.snoozeMinutes * MILLISECONDS_PER_MINUTE
+  );
+}
+
+/**
+ * @brief 验证同一时刻到期时护眼提醒优先，且队列不会重复添加同类型。
+ */
+function verifyDuePriorityAndQueueDeduplication(): void
+{
+  const fixture = createSchedulerFixture();
+  fixture.scheduler.start();
+  fixture.clock.advance(STANDING_REMINDER_INTERVAL_MILLISECONDS);
+  fixture.timerScheduler.runDue();
+
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
+  );
+  assert.deepEqual(fixture.scheduler.getPendingReminderTypes(), [
+    ReminderType.Standing
+  ]);
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.Standing),
+    ReminderState.Queued
+  );
+
+  fixture.timerScheduler.runDue();
+  assert.deepEqual(fixture.scheduler.getPendingReminderTypes(), [
+    ReminderType.Standing
+  ]);
+  assert.deepEqual(fixture.events, [
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    }
+  ]);
+
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
+    true
+  );
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
+  );
+  assert.deepEqual(fixture.scheduler.getPendingReminderTypes(), []);
+}
+
+/**
+ * @brief 验证锁屏和睡眠会同时冻结两条轨道的剩余时间。
+ */
+function verifySystemPauseKeepsBothRemainders(): void
+{
+  const fixture = createSchedulerFixture();
+  fixture.scheduler.start();
   fixture.clock.advance(5 * MILLISECONDS_PER_MINUTE);
-  assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
-    15 * MILLISECONDS_PER_MINUTE
-  );
+
   assert.equal(
     fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.UserLocked }),
     true
   );
   assert.equal(fixture.scheduler.isSystemPaused(), true);
-  assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
-    15 * MILLISECONDS_PER_MINUTE
-  );
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
-
-  fixture.clock.advance(30 * MILLISECONDS_PER_MINUTE);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
   assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
     15 * MILLISECONDS_PER_MINUTE
   );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    25 * MILLISECONDS_PER_MINUTE
+  );
+
+  fixture.clock.advance(60 * MILLISECONDS_PER_MINUTE);
+  fixture.timerScheduler.runDue();
   assert.deepEqual(fixture.events, []);
-
   assert.equal(
-    fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.UserLocked }),
-    false
-  );
-  assert.equal(
-    fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.SystemSuspended }),
+    fixture.scheduler.dispatchSystemEvent({
+      type: SystemEventType.SystemSuspended
+    }),
     true
   );
   assert.equal(
@@ -414,178 +445,114 @@ function verifySystemPauseKeepsWaitingRemainder(): void
     fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.SystemResumed }),
     true
   );
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
-  assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
-    15 * MILLISECONDS_PER_MINUTE
-  );
+  assert.equal(fixture.timerScheduler.pendingTimerCount(), 2);
 
-  fixture.clock.advance(15 * MILLISECONDS_PER_MINUTE - 1);
+  fixture.clock.advance(15 * MILLISECONDS_PER_MINUTE);
   fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
-  fixture.clock.advance(1);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
+  );
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.Standing),
+    ReminderState.Waiting
+  );
 }
 
 /**
- * @brief 验证调度器启动前收到的系统暂停事件不会启动错误计时。
- */
-function verifySystemPauseBeforeSchedulerStart(): void
-{
-  const fixture = createSchedulerFixture();
-
-  assert.equal(
-    fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.UserLocked }),
-    true
-  );
-  assert.equal(fixture.scheduler.start(), true);
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
-
-  fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
-
-  assert.equal(
-    fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.UserUnlocked }),
-    true
-  );
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
-}
-
-/**
- * @brief 验证推迟中的剩余时间在睡眠恢复后继续使用。
- */
-function verifySystemPauseKeepsSnoozeRemainder(): void
-{
-  const fixture = createSchedulerFixture();
-
-  fixture.scheduler.start();
-  fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
-  fixture.timerScheduler.runDue();
-  assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Snooze }),
-    true
-  );
-
-  fixture.clock.advance(1 * MILLISECONDS_PER_MINUTE);
-  assert.equal(
-    fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.SystemSuspended }),
-    true
-  );
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
-
-  fixture.clock.advance(20 * MILLISECONDS_PER_MINUTE);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Snoozed);
-
-  assert.equal(
-    fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.SystemResumed }),
-    true
-  );
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
-  fixture.clock.advance(2 * MILLISECONDS_PER_MINUTE - 1);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Snoozed);
-  fixture.clock.advance(1);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-}
-
-/**
- * @brief 验证待处理提醒在锁屏和解锁后仍保持待处理状态。
+ * @brief 验证系统暂停发生在弹窗展示期间时不会关闭当前弹窗。
  */
 function verifySystemPauseKeepsVisibleReminder(): void
 {
   const fixture = createSchedulerFixture();
-
   fixture.scheduler.start();
   fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
   fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-
   fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.UserLocked });
-  fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.SystemSuspended });
+
   fixture.clock.advance(30 * MILLISECONDS_PER_MINUTE);
   fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    10 * MILLISECONDS_PER_MINUTE
+  );
   assert.deepEqual(fixture.events, [
-    { type: ReminderOutputEventType.Show }
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    }
   ]);
 
   fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.UserUnlocked });
-  fixture.scheduler.dispatchSystemEvent({ type: SystemEventType.SystemResumed });
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
+  assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Complete }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
-  assert.deepEqual(fixture.events, [
-    { type: ReminderOutputEventType.Show },
-    { type: ReminderOutputEventType.Hide }
-  ]);
+  assert.equal(fixture.scheduler.getState(ReminderType.EyeRest), ReminderState.Waiting);
 }
 
 /**
- * @brief 验证暂停会取消等待，恢复会重新开始完整的 20 分钟周期。
+ * @brief 验证手动暂停会隐藏当前弹窗，但保留待处理队列。
  */
-function verifyPauseAndResume(): void
+function verifyManualPauseKeepsQueue(): void
 {
   const fixture = createSchedulerFixture();
-
   fixture.scheduler.start();
-  assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
+  fixture.clock.advance(STANDING_REMINDER_INTERVAL_MILLISECONDS);
+  fixture.timerScheduler.runDue();
+
   assert.equal(
     fixture.scheduler.dispatch({ type: ReminderCommandType.Pause }),
     true
   );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Paused);
-  assert.equal(fixture.scheduler.getNextReminderRemainingMilliseconds(), undefined);
+  assert.equal(fixture.scheduler.isManuallyPaused(), true);
+  assert.equal(fixture.scheduler.getState(ReminderType.EyeRest), ReminderState.Paused);
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.Standing),
+    ReminderState.Queued
+  );
+  assert.deepEqual(fixture.scheduler.getPendingReminderTypes(), [
+    ReminderType.Standing
+  ]);
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
-
-  fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Paused);
-  assert.deepEqual(fixture.events, []);
+  assert.deepEqual(fixture.events, [
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    },
+    { type: ReminderOutputEventType.Hide }
+  ]);
 
   assert.equal(
     fixture.scheduler.dispatch({ type: ReminderCommandType.Resume }),
     true
   );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
+  assert.equal(fixture.scheduler.isManuallyPaused(), false);
   assert.equal(
-    fixture.scheduler.getNextReminderRemainingMilliseconds(),
-    REMINDER_INTERVAL_MILLISECONDS
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
+  );
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.EyeRest),
+    ReminderState.Waiting
   );
   assert.equal(fixture.timerScheduler.pendingTimerCount(), 1);
-
-  fixture.clock.advance(REMINDER_INTERVAL_MILLISECONDS - 1);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
-
-  fixture.clock.advance(1);
-  fixture.timerScheduler.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-
-  assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Pause }),
-    true
-  );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Paused);
-  assert.deepEqual(fixture.events, [
-    { type: ReminderOutputEventType.Show },
-    { type: ReminderOutputEventType.Hide }
-  ]);
 }
 
 /**
- * @brief 验证立即提醒只显示一次，重复请求只置前已有提醒。
+ * @brief 验证立即提醒始终作用于护眼轨道。
  */
-function verifyImmediateReminder(): void
+function verifyImmediateEyeReminder(): void
 {
   const fixture = createSchedulerFixture();
-
   fixture.scheduler.start();
   assert.equal(
     fixture.scheduler.dispatch({ type: ReminderCommandType.RemindNow }),
@@ -595,31 +562,94 @@ function verifyImmediateReminder(): void
     fixture.scheduler.dispatch({ type: ReminderCommandType.RemindNow }),
     true
   );
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
+  );
   assert.deepEqual(fixture.events, [
-    { type: ReminderOutputEventType.Show },
-    { type: ReminderOutputEventType.BringToFront }
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    },
+    {
+      type: ReminderOutputEventType.BringToFront,
+      reminderType: ReminderType.EyeRest
+    }
+  ]);
+
+  fixture.scheduler.dispatch({
+    type: ReminderCommandType.Complete,
+    reminderType: ReminderType.EyeRest
+  });
+  fixture.clock.advance(20 * MILLISECONDS_PER_MINUTE);
+  fixture.timerScheduler.runDue();
+  fixture.scheduler.dispatch({
+    type: ReminderCommandType.Complete,
+    reminderType: ReminderType.EyeRest
+  });
+  fixture.clock.advance(10 * MILLISECONDS_PER_MINUTE);
+  fixture.timerScheduler.runDue();
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
+  );
+  assert.equal(
+    fixture.scheduler.dispatch({ type: ReminderCommandType.RemindNow }),
+    true
+  );
+  assert.deepEqual(fixture.scheduler.getPendingReminderTypes(), [
+    ReminderType.EyeRest
   ]);
 }
 
 /**
- * @brief 验证未启动或当前状态不允许的命令会被拒绝且不产生事件。
+ * @brief 验证停止后再次启动会为两条轨道重新开始完整周期。
+ */
+function verifyRestartStartsFreshCycles(): void
+{
+  const fixture = createSchedulerFixture();
+  fixture.scheduler.start();
+  fixture.clock.advance(5 * MILLISECONDS_PER_MINUTE);
+  fixture.scheduler.stop();
+  assert.equal(fixture.timerScheduler.pendingTimerCount(), 0);
+
+  assert.equal(fixture.scheduler.start(), true);
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
+    REMINDER_INTERVAL_MILLISECONDS
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    STANDING_REMINDER_INTERVAL_MILLISECONDS
+  );
+}
+
+/**
+ * @brief 验证无效操作不会改变提醒状态。
  */
 function verifyInvalidCommands(): void
 {
   const fixture = createSchedulerFixture();
-
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Complete }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
     false
   );
   fixture.scheduler.start();
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Complete }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
     false
   );
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Snooze }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Snooze,
+      reminderType: ReminderType.Standing
+    }),
     false
   );
   assert.equal(
@@ -637,16 +667,13 @@ function verifyInvalidCommands(): void
   assert.deepEqual(fixture.events, []);
 }
 
-test("core model baseline", verifyCoreModel);
-test("manual monotonic time progression", verifyManualTimeProgression);
-test("one-shot timer cancellation", verifyTimerCancellation);
-test("normal reminder cycle", verifyNormalReminderCycle);
-test("snooze and repeated snooze", verifySnoozeAndRepeatedSnooze);
-test("settings change does not reset active snooze", verifySettingsChangeDoesNotResetSnooze);
-test("system pause keeps waiting remainder", verifySystemPauseKeepsWaitingRemainder);
-test("system pause before scheduler start", verifySystemPauseBeforeSchedulerStart);
-test("system pause keeps snooze remainder", verifySystemPauseKeepsSnoozeRemainder);
+test("core model supports typed reminders", verifyCoreModel);
+test("independent reminder cycles", verifyIndependentReminderCycles);
+test("typed actions remain independent", verifyActionsRemainIndependent);
+test("due priority and queue deduplication", verifyDuePriorityAndQueueDeduplication);
+test("system pause keeps both remainders", verifySystemPauseKeepsBothRemainders);
 test("system pause keeps visible reminder", verifySystemPauseKeepsVisibleReminder);
-test("pause and resume", verifyPauseAndResume);
-test("immediate reminder", verifyImmediateReminder);
+test("manual pause keeps pending queue", verifyManualPauseKeepsQueue);
+test("immediate reminder targets eye rest", verifyImmediateEyeReminder);
+test("restart starts fresh cycles", verifyRestartStartsFreshCycles);
 test("invalid scheduler commands", verifyInvalidCommands);

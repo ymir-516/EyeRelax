@@ -11,8 +11,8 @@ import { join } from "node:path";
 import {
   DEFAULT_SETTINGS,
   ReminderCommandType,
-  ReminderState,
   type ReminderOutputEvent,
+  type ReminderTypeValue,
   type SystemEvent
 } from "../core/model.js";
 import { ReminderScheduler } from "../core/reminder-scheduler.js";
@@ -168,10 +168,15 @@ const electronReminderWindowHost: ReminderWindowHost = {
       },
       isDestroyed: (): boolean => window.isDestroyed(),
       isMinimized: (): boolean => window.isMinimized(),
-      load: (snoozeMinutes: number): void => {
+      load: (snoozeMinutes: number, reminderType: ReminderTypeValue): void => {
         void window.loadFile(
           join(app.getAppPath(), "src/renderer/reminder.html"),
-          { query: { snoozeMinutes: String(snoozeMinutes) } }
+          {
+            query: {
+              snoozeMinutes: String(snoozeMinutes),
+              reminderType
+            }
+          }
         );
       },
       setPosition: (x: number, y: number): void => {
@@ -324,8 +329,9 @@ function activateExistingWindows(): void
 
   settingsWindowController.bringToFront();
 
-  if (reminderScheduler.getState() === ReminderState.ReminderVisible)
-    reminderWindowController.bringToFront();
+  const reminderType = reminderScheduler.getCurrentReminderType();
+  if (reminderType !== undefined)
+    reminderWindowController.bringToFront(reminderType);
 }
 
 /**
@@ -440,13 +446,13 @@ function handleReminderOutput(event: ReminderOutputEvent): void
 {
   switch (event.type) {
     case "show":
-      reminderWindowController.show();
+      reminderWindowController.show(event.reminderType);
       break;
     case "hide":
       reminderWindowController.hide();
       break;
     case "bring-to-front":
-      reminderWindowController.bringToFront();
+      reminderWindowController.bringToFront(event.reminderType);
       break;
   }
 
@@ -531,17 +537,23 @@ function stopScheduler(): void
 /**
  * @brief 处理提醒窗口的“已休息”动作。
  */
-function completeReminder(): boolean
+function completeReminder(reminderType: ReminderTypeValue): boolean
 {
-  return reminderScheduler.dispatch({ type: ReminderCommandType.Complete });
+  return reminderScheduler.dispatch({
+    type: ReminderCommandType.Complete,
+    reminderType
+  });
 }
 
 /**
  * @brief 处理提醒窗口的“推迟”动作。
  */
-function snoozeReminder(): boolean
+function snoozeReminder(reminderType: ReminderTypeValue): boolean
 {
-  return reminderScheduler.dispatch({ type: ReminderCommandType.Snooze });
+  return reminderScheduler.dispatch({
+    type: ReminderCommandType.Snooze,
+    reminderType
+  });
 }
 
 /**

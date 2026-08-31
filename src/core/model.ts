@@ -8,6 +8,7 @@ export const ReminderState = {
   Waiting: "waiting",
   ReminderVisible: "reminder-visible",
   Snoozed: "snoozed",
+  Queued: "queued",
   Paused: "paused"
 } as const;
 
@@ -15,6 +16,32 @@ export const ReminderState = {
  * @brief 提醒状态类型。
  */
 export type ReminderState = typeof ReminderState[keyof typeof ReminderState];
+
+/**
+ * @brief 提醒类型。
+ *
+ * 护眼和站立提醒使用独立的计时周期，但共用同一个提醒窗口。
+ */
+export const ReminderType = {
+  EyeRest: "eye-rest",
+  Standing: "standing"
+} as const;
+
+/**
+ * @brief 提醒类型值。
+ */
+export type ReminderTypeValue = typeof ReminderType[keyof typeof ReminderType];
+
+/**
+ * @brief 判断未知值是否为合法的提醒类型。
+ *
+ * IPC 参数来自渲染进程，必须在主进程边界重新校验，避免把任意字符串
+ * 传入调度器。
+ */
+export function isReminderType(value: unknown): value is ReminderTypeValue
+{
+  return value === ReminderType.EyeRest || value === ReminderType.Standing;
+}
 
 /**
  * @brief 定义调度器可以接收的业务命令类型。
@@ -31,8 +58,14 @@ export const ReminderCommandType = {
  * @brief 提醒命令的联合类型。
  */
 export type ReminderCommand =
-  | { type: typeof ReminderCommandType.Complete }
-  | { type: typeof ReminderCommandType.Snooze }
+  | {
+      type: typeof ReminderCommandType.Complete;
+      reminderType: ReminderTypeValue;
+    }
+  | {
+      type: typeof ReminderCommandType.Snooze;
+      reminderType: ReminderTypeValue;
+    }
   | { type: typeof ReminderCommandType.RemindNow }
   | { type: typeof ReminderCommandType.Pause }
   | { type: typeof ReminderCommandType.Resume };
@@ -50,9 +83,15 @@ export const ReminderOutputEventType = {
  * @brief 提醒输出事件的联合类型。
  */
 export type ReminderOutputEvent =
-  | { type: typeof ReminderOutputEventType.Show }
+  | {
+      type: typeof ReminderOutputEventType.Show;
+      reminderType: ReminderTypeValue;
+    }
   | { type: typeof ReminderOutputEventType.Hide }
-  | { type: typeof ReminderOutputEventType.BringToFront };
+  | {
+      type: typeof ReminderOutputEventType.BringToFront;
+      reminderType: ReminderTypeValue;
+    };
 
 /**
  * @brief 定义平台层转换后供核心模块消费的系统事件类型。

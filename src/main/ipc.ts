@@ -3,14 +3,18 @@ import {
   IPC_CHANNELS,
   type RuntimeInfo
 } from "../core/ipc.js";
-import type { ReminderSettings } from "../core/model.js";
+import {
+  isReminderType,
+  type ReminderSettings,
+  type ReminderTypeValue
+} from "../core/model.js";
 
 /**
  * @brief 提醒窗口可调用的主进程动作。
  */
 export interface ReminderIpcHandlers {
-  completeReminder(): boolean;
-  snoozeReminder(): boolean;
+  completeReminder(reminderType: ReminderTypeValue): boolean;
+  snoozeReminder(reminderType: ReminderTypeValue): boolean;
 }
 
 /**
@@ -35,6 +39,14 @@ function getRuntimeInfo(): RuntimeInfo
 }
 
 /**
+ * @brief 从 IPC 参数中读取合法的提醒类型。
+ */
+function readReminderType(value: unknown): ReminderTypeValue | undefined
+{
+  return isReminderType(value) ? value : undefined;
+}
+
+/**
  * @brief 注册正式应用使用的最小 IPC 处理器集合。
  */
 export function registerIpcHandlers(
@@ -44,11 +56,21 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.getRuntimeInfo, getRuntimeInfo);
   ipcMain.handle(
     IPC_CHANNELS.completeReminder,
-    (): boolean => handlers.completeReminder()
+    (_event, value: unknown): boolean => {
+      const reminderType = readReminderType(value);
+      return reminderType === undefined
+        ? false
+        : handlers.completeReminder(reminderType);
+    }
   );
   ipcMain.handle(
     IPC_CHANNELS.snoozeReminder,
-    (): boolean => handlers.snoozeReminder()
+    (_event, value: unknown): boolean => {
+      const reminderType = readReminderType(value);
+      return reminderType === undefined
+        ? false
+        : handlers.snoozeReminder(reminderType);
+    }
   );
   ipcMain.handle(
     IPC_CHANNELS.loadSettings,

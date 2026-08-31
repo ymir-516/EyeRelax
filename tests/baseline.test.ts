@@ -49,3 +49,19 @@ test(
   "reminder page does not use implicit keyboard actions",
   verifyReminderPageDoesNotUseImplicitKeyboardActions
 );
+
+/**
+ * @brief 确认提醒页面支持站立提醒的类型化文案和 IPC 参数。
+ */
+function verifyStandingReminderContent(): void
+{
+  const reminderPath = join(process.cwd(), "src", "renderer", "reminder.html");
+  const reminderSource = readFileSync(reminderPath, "utf8");
+
+  assert.match(reminderSource, /reminderType/);
+  assert.match(reminderSource, /站立提醒/);
+  assert.match(reminderSource, /已站立/);
+  assert.match(reminderSource, /completeReminder\(reminderType\)/);
+}
+
+test("reminder page contains standing reminder content", verifyStandingReminderContent);

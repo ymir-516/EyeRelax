@@ -1,3 +1,8 @@
+import {
+  ReminderType,
+  type ReminderTypeValue
+} from "../core/model.js";
+
 /**
  * @brief 提醒窗口的固定尺寸。
  */
@@ -51,7 +56,7 @@ export interface ReminderWindowHandle {
   onClose(listener: (event: ReminderWindowCloseEvent) => void): void;
   isDestroyed(): boolean;
   isMinimized(): boolean;
-  load(snoozeMinutes: number): void;
+  load(snoozeMinutes: number, reminderType: ReminderTypeValue): void;
   setPosition(x: number, y: number): void;
   show(): void;
   hide(): void;
@@ -110,6 +115,7 @@ export class ReminderWindowController
   private started = false;
   private reminderWindow: ReminderWindowHandle | undefined;
   private allowClose = false;
+  private reminderType: ReminderTypeValue = ReminderType.EyeRest;
 
   /**
    * @brief 创建提醒窗口控制器。
@@ -132,18 +138,19 @@ export class ReminderWindowController
   /**
    * @brief 显示提醒窗口并定位到鼠标所在屏幕右下角。
    */
-  show(): void
+  show(reminderType: ReminderTypeValue = ReminderType.EyeRest): void
   {
     if (!this.started)
       return;
 
+    this.reminderType = reminderType;
     const reminderWindow = this.getOrCreateWindow();
     const cursorPoint = this.options.host.getCursorScreenPoint();
     const workArea = this.options.host.getDisplayNearestPoint(cursorPoint);
     const position = calculateReminderWindowPosition(workArea);
 
     reminderWindow.setPosition(position.x, position.y);
-    reminderWindow.load(this.options.getSnoozeMinutes());
+    reminderWindow.load(this.options.getSnoozeMinutes(), reminderType);
     reminderWindow.show();
   }
 
@@ -159,11 +166,16 @@ export class ReminderWindowController
   /**
    * @brief 将已有提醒窗口恢复、显示并聚焦。
    */
-  bringToFront(): void
+  bringToFront(reminderType: ReminderTypeValue = this.reminderType): void
   {
     const reminderWindow = this.getExistingWindow();
     if (reminderWindow === undefined)
       return;
+
+    if (reminderType !== this.reminderType) {
+      this.reminderType = reminderType;
+      reminderWindow.load(this.options.getSnoozeMinutes(), reminderType);
+    }
 
     if (reminderWindow.isMinimized())
       reminderWindow.restore();
@@ -179,6 +191,7 @@ export class ReminderWindowController
   {
     this.started = false;
     this.allowClose = true;
+    this.reminderType = ReminderType.EyeRest;
 
     const reminderWindow = this.reminderWindow;
     this.reminderWindow = undefined;

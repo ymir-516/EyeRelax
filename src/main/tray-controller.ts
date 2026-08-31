@@ -2,7 +2,9 @@ import {
   ReminderCommandType,
   ReminderState,
   type ReminderCommand,
-  type ReminderState as ReminderStateValue
+  type ReminderState as ReminderStateValue,
+  ReminderType,
+  type ReminderTypeValue
 } from "../core/model.js";
 import {
   type OneShotTimer,
@@ -93,17 +95,24 @@ export interface TrayScheduler {
   /**
    * @brief 返回当前提醒状态。
    */
-  getState(): ReminderStateValue;
+  getState(reminderType?: ReminderTypeValue): ReminderStateValue;
 
   /**
    * @brief 获取下次提醒的剩余毫秒数。
    */
-  getNextReminderRemainingMilliseconds(): number | undefined;
+  getNextReminderRemainingMilliseconds(
+    reminderType?: ReminderTypeValue
+  ): number | undefined;
 
   /**
    * @brief 判断系统是否因锁屏或睡眠处于暂停状态。
    */
   isSystemPaused(): boolean;
+
+  /**
+   * @brief 判断是否处于手动暂停状态。
+   */
+  isManuallyPaused(): boolean;
 
   /**
    * @brief 向提醒调度器发送托盘命令。
@@ -177,12 +186,11 @@ export class TrayController
     if (!this.started || this.tray === undefined)
       return;
 
-    const state = this.options.scheduler.getState();
-    const paused = state === ReminderState.Paused;
+    const paused = this.options.scheduler.isManuallyPaused();
     const visualState: TrayVisualState = paused ? "paused" : "running";
 
     this.tray.setImage(visualState);
-    this.tray.setToolTip(this.createToolTip(state));
+    this.tray.setToolTip(this.createToolTip());
     this.tray.setContextMenu(
       this.options.host.buildContextMenu(this.createMenuTemplate(paused))
     );
@@ -218,25 +226,39 @@ export class TrayController
    *
    * 提示文本只读取调度器状态和剩余时间，避免托盘自行维护另一份倒计时状态。
    */
-  private createToolTip(state: ReminderStateValue): string
+  private createToolTip(): string
   {
-    if (state === ReminderState.Paused)
-      return "护眼提醒 - 已暂停";
+    const statusPrefix = this.options.scheduler.isManuallyPaused()
+      ? "已暂停 | "
+      : this.options.scheduler.isSystemPaused()
+        ? "系统暂停 | "
+        : "";
+    return `${statusPrefix}${this.createReminderToolTip(ReminderType.EyeRest)} | ` +
+      this.createReminderToolTip(ReminderType.Standing);
+  }
 
+  /**
+   * @brief 创建单条提醒在托盘提示中的状态文本。
+   */
+  private createReminderToolTip(reminderType: ReminderTypeValue): string
+  {
+    const label = reminderType === ReminderType.EyeRest ? "护眼" : "站立";
+    const state = this.options.scheduler.getState(reminderType);
     if (state === ReminderState.ReminderVisible)
-      return "护眼提醒 - 提醒进行中";
+      return `${label}提醒中`;
+
+    if (state === ReminderState.Queued)
+      return `${label}待处理`;
+
+    if (state === ReminderState.Paused)
+      return `${label}已暂停`;
 
     const remainingMilliseconds =
-      this.options.scheduler.getNextReminderRemainingMilliseconds();
-    if (remainingMilliseconds === undefined) {
-      if (this.options.scheduler.isSystemPaused())
-        return "护眼提醒 - 系统暂停";
+      this.options.scheduler.getNextReminderRemainingMilliseconds(reminderType);
+    if (remainingMilliseconds === undefined)
+      return `${label}等待中`;
 
-      return "护眼提醒 - 等待中";
-    }
-
-    const pausePrefix = this.options.scheduler.isSystemPaused() ? "系统暂停 - " : "";
-    return `护眼提醒 - ${pausePrefix}下次提醒：${formatCountdown(remainingMilliseconds)} 后`;
+    return `${label} ${formatCountdown(remainingMilliseconds)}`;
   }
 
   /**
@@ -255,7 +277,7 @@ export class TrayController
           return;
 
         this.tray.setToolTip(
-          this.createToolTip(this.options.scheduler.getState())
+          this.createToolTip()
         );
         this.scheduleCountdownRefresh();
       }

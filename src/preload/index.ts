@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { IpcChannels, RuntimeInfo } from "../core/ipc.js";
-import type { ReminderSettings } from "../core/model.js";
+import type {
+  ReminderSettings,
+  ReminderTypeValue
+} from "../core/model.js";
 
 /**
  * @brief 定义沙箱预加载脚本可以直接使用的 IPC 通道。
@@ -29,12 +32,12 @@ interface ElectronApi
   /**
    * @brief 通知主进程用户已完成休息。
    */
-  completeReminder(): Promise<boolean>;
+  completeReminder(reminderType: ReminderTypeValue): Promise<boolean>;
 
   /**
    * @brief 通知主进程用户要推迟休息。
    */
-  snoozeReminder(): Promise<boolean>;
+  snoozeReminder(reminderType: ReminderTypeValue): Promise<boolean>;
 
   /**
    * @brief 读取当前设置。
@@ -59,17 +62,17 @@ const electronApi: ElectronApi = {
   /**
    * @brief 通过受限 IPC 提交完成休息动作。
    */
-  completeReminder(): Promise<boolean>
+  completeReminder(reminderType: ReminderTypeValue): Promise<boolean>
   {
-    return ipcRenderer.invoke(IPC_CHANNELS.completeReminder);
+    return ipcRenderer.invoke(IPC_CHANNELS.completeReminder, reminderType);
   },
 
   /**
    * @brief 通过受限 IPC 提交推迟休息动作。
    */
-  snoozeReminder(): Promise<boolean>
+  snoozeReminder(reminderType: ReminderTypeValue): Promise<boolean>
   {
-    return ipcRenderer.invoke(IPC_CHANNELS.snoozeReminder);
+    return ipcRenderer.invoke(IPC_CHANNELS.snoozeReminder, reminderType);
   },
 
   /**

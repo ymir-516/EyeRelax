@@ -52,11 +52,13 @@ import {
   DEFAULT_SETTINGS,
   ReminderOutputEventType,
   ReminderState,
+  ReminderType,
   SystemEventType,
   type ReminderCommand,
   type ReminderOutputEvent,
   type ReminderSettings,
   type ReminderState as ReminderStateValue,
+  type ReminderTypeValue,
   type SystemEvent
 } from "../src/core/model.js";
 import {
@@ -564,7 +566,7 @@ class FakeTrayScheduler implements TrayScheduler
   /**
    * @brief 返回内存调度器状态。
    */
-  getState(): ReminderStateValue
+  getState(reminderType?: ReminderTypeValue): ReminderStateValue
   {
     return this.state;
   }
@@ -572,8 +574,13 @@ class FakeTrayScheduler implements TrayScheduler
   /**
    * @brief 返回内存调度器中的下次提醒剩余时间。
    */
-  getNextReminderRemainingMilliseconds(): number | undefined
+  getNextReminderRemainingMilliseconds(
+    reminderType?: ReminderTypeValue
+  ): number | undefined
   {
+    if (reminderType === ReminderType.Standing)
+      return 30 * MILLISECONDS_PER_MINUTE;
+
     return this.remainingMilliseconds;
   }
 
@@ -583,6 +590,14 @@ class FakeTrayScheduler implements TrayScheduler
   isSystemPaused(): boolean
   {
     return this.systemPaused;
+  }
+
+  /**
+   * @brief 返回内存调度器中的手动暂停状态。
+   */
+  isManuallyPaused(): boolean
+  {
+    return this.state === ReminderState.Paused;
   }
 
   /**
@@ -652,17 +667,17 @@ function verifyTrayController(): void
   controller.start();
   assert.equal(host.createCount, 1);
   assert.equal(host.tray.visualState, "running");
-  assert.equal(host.tray.toolTip, "护眼提醒 - 下次提醒：20:00 后");
+  assert.equal(host.tray.toolTip, "护眼 20:00 | 站立 30:00");
   assert.equal(findTrayMenuItem(host.latestTemplate(), "状态：运行中").enabled, false);
 
   scheduler.remainingMilliseconds = 4 * MILLISECONDS_PER_MINUTE + 1;
   clock.advance(1000);
   timerScheduler.runDue();
-  assert.equal(host.tray.toolTip, "护眼提醒 - 下次提醒：04:01 后");
+  assert.equal(host.tray.toolTip, "护眼 04:01 | 站立 30:00");
 
   scheduler.systemPaused = true;
   controller.refresh();
-  assert.equal(host.tray.toolTip, "护眼提醒 - 系统暂停 - 下次提醒：04:01 后");
+  assert.equal(host.tray.toolTip, "系统暂停 | 护眼 04:01 | 站立 30:00");
   scheduler.systemPaused = false;
 
   findTrayMenuItem(host.latestTemplate(), "立即提醒").click?.();
@@ -675,7 +690,7 @@ function verifyTrayController(): void
   findTrayMenuItem(host.latestTemplate(), "暂停提醒").click?.();
   assert.equal(scheduler.state, ReminderState.Paused);
   assert.equal(host.tray.visualState, "paused");
-  assert.equal(host.tray.toolTip, "护眼提醒 - 已暂停");
+  assert.equal(host.tray.toolTip, "已暂停 | 护眼已暂停 | 站立已暂停");
   assert.equal(findTrayMenuItem(host.latestTemplate(), "状态：已暂停").enabled, false);
 
   findTrayMenuItem(host.latestTemplate(), "立即提醒").click?.();
@@ -710,6 +725,7 @@ class FakeReminderWindow implements ReminderWindowHandle
   private closeListener: ((event: ReminderWindowCloseEvent) => void) | undefined;
   private destroyed = false;
   readonly loadedSnoozeMinutes: number[] = [];
+  readonly loadedReminderTypes: ReminderTypeValue[] = [];
   readonly positions: ReminderPoint[] = [];
   showCount = 0;
   hideCount = 0;
@@ -745,9 +761,10 @@ class FakeReminderWindow implements ReminderWindowHandle
   /**
    * @brief 记录页面加载时使用的设置。
    */
-  load(snoozeMinutes: number): void
+  load(snoozeMinutes: number, reminderType: ReminderTypeValue): void
   {
     this.loadedSnoozeMinutes.push(snoozeMinutes);
+    this.loadedReminderTypes.push(reminderType);
   }
 
   /**
@@ -891,7 +908,7 @@ function verifyReminderWindowController(): void
   assert.equal(host.windows.length, 0);
   controller.show();
   snoozeMinutes = 9;
-  controller.show();
+  controller.show(ReminderType.Standing);
 
   assert.equal(host.windows.length, 1);
   assert.deepEqual(host.latestOptions, {
@@ -913,6 +930,10 @@ function verifyReminderWindowController(): void
 
   const reminderWindow = host.windows[0];
   assert.deepEqual(reminderWindow.loadedSnoozeMinutes, [7, 9]);
+  assert.deepEqual(reminderWindow.loadedReminderTypes, [
+    ReminderType.EyeRest,
+    ReminderType.Standing
+  ]);
   assert.deepEqual(reminderWindow.positions, [
     { x: 664, y: 594 },
     { x: 664, y: 594 }
@@ -1254,13 +1275,13 @@ function createApplicationIntegrationFixture(): ApplicationIntegrationFixture
     emit: (event: ReminderOutputEvent): void => {
       switch (event.type) {
         case ReminderOutputEventType.Show:
-          reminderController.show();
+          reminderController.show(event.reminderType);
           break;
         case ReminderOutputEventType.Hide:
           reminderController.hide();
           break;
         case ReminderOutputEventType.BringToFront:
-          reminderController.bringToFront();
+          reminderController.bringToFront(event.reminderType);
           break;
       }
 
@@ -1333,74 +1354,112 @@ function verifyApplicationIntegrationFlow(): void
   fixture.scheduler.start();
 
   assert.equal(fixture.trayHost.createCount, 1);
-  assert.equal(fixture.timers.pendingTimerCount(), 1);
+  assert.equal(fixture.timers.pendingTimerCount(), 2);
   assert.equal(fixture.powerHost.listenerCount(), 4);
 
   fixture.clock.advance(20 * MILLISECONDS_PER_MINUTE);
   fixture.timers.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
+  );
   assert.equal(fixture.reminderHost.windows.length, 1);
   assert.equal(fixture.reminderHost.windows[0].showCount, 1);
+  assert.deepEqual(fixture.reminderHost.windows[0].loadedReminderTypes, [
+    ReminderType.EyeRest
+  ]);
 
   findTrayMenuItem(fixture.trayHost.latestTemplate(), "立即提醒").click?.();
   assert.equal(fixture.reminderHost.windows.length, 1);
   assert.equal(fixture.reminderHost.windows[0].focusCount, 1);
 
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Complete }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
+  assert.equal(
+    fixture.scheduler.getState(ReminderType.EyeRest),
+    ReminderState.Waiting
+  );
   assert.equal(fixture.reminderHost.windows[0].hideCount, 1);
-  assert.equal(fixture.timers.pendingTimerCount(), 1);
+  assert.equal(fixture.timers.pendingTimerCount(), 2);
+
+  fixture.clock.advance(10 * MILLISECONDS_PER_MINUTE);
+  fixture.timers.runDue();
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
+  );
+  assert.deepEqual(fixture.reminderHost.windows[0].loadedReminderTypes, [
+    ReminderType.EyeRest,
+    ReminderType.Standing
+  ]);
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.Standing
+    }),
+    true
+  );
+  assert.equal(fixture.reminderHost.windows[0].hideCount, 2);
+
+  fixture.clock.advance(10 * MILLISECONDS_PER_MINUTE);
+  fixture.timers.runDue();
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
+  );
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
+    true
+  );
 
   fixture.clock.advance(20 * MILLISECONDS_PER_MINUTE);
   fixture.timers.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Snooze }),
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
+  );
+  assert.deepEqual(fixture.scheduler.getPendingReminderTypes(), [
+    ReminderType.Standing
+  ]);
+
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
-  assert.equal(fixture.scheduler.getState(), ReminderState.Snoozed);
-  fixture.settings.snoozeMinutes = 1;
-
-  fixture.clock.advance(3 * MILLISECONDS_PER_MINUTE);
-  fixture.timers.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Snooze }),
-    true
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
   );
-  fixture.clock.advance(1 * MILLISECONDS_PER_MINUTE);
-  fixture.timers.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-
-  findTrayMenuItem(fixture.trayHost.latestTemplate(), "暂停提醒").click?.();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Paused);
-  assert.equal(fixture.reminderHost.windows[0].hideCount, 4);
-  findTrayMenuItem(fixture.trayHost.latestTemplate(), "恢复提醒").click?.();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
-  assert.equal(fixture.timers.pendingTimerCount(), 1);
-
-  findTrayMenuItem(fixture.trayHost.latestTemplate(), "暂停提醒").click?.();
-  findTrayMenuItem(fixture.trayHost.latestTemplate(), "立即提醒").click?.();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
-  assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.Complete }),
-    true
-  );
+  assert.deepEqual(fixture.reminderHost.windows[0].loadedReminderTypes, [
+    ReminderType.EyeRest,
+    ReminderType.Standing,
+    ReminderType.EyeRest,
+    ReminderType.EyeRest,
+    ReminderType.Standing
+  ]);
 
   fixture.clock.advance(5 * MILLISECONDS_PER_MINUTE);
   fixture.powerHost.trigger("lock-screen");
   assert.equal(fixture.timers.pendingTimerCount(), 0);
   fixture.clock.advance(30 * MILLISECONDS_PER_MINUTE);
   fixture.timers.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.Waiting);
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
+  );
   fixture.powerHost.trigger("unlock-screen");
   assert.equal(fixture.timers.pendingTimerCount(), 1);
-  fixture.clock.advance(15 * MILLISECONDS_PER_MINUTE);
-  fixture.timers.runDue();
-  assert.equal(fixture.scheduler.getState(), ReminderState.ReminderVisible);
 
   findTrayMenuItem(fixture.trayHost.latestTemplate(), "设置").click?.();
   assert.equal(fixture.settingsHost.windows.length, 1);
@@ -1449,19 +1508,31 @@ function verifyApplicationRestartFlow(): void
   fixture.clock.advance(20 * MILLISECONDS_PER_MINUTE);
   fixture.timers.runDue();
   assert.equal(restartedScheduler.getState(), ReminderState.ReminderVisible);
-  assert.deepEqual(outputEvents, [{ type: ReminderOutputEventType.Show }]);
+  assert.deepEqual(outputEvents, [{
+    type: ReminderOutputEventType.Show,
+    reminderType: ReminderType.EyeRest
+  }]);
 
   assert.equal(
-    restartedScheduler.dispatch({ type: ReminderCommandType.Snooze }),
+    restartedScheduler.dispatch({
+      type: ReminderCommandType.Snooze,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
   fixture.clock.advance(7 * MILLISECONDS_PER_MINUTE);
   fixture.timers.runDue();
   assert.equal(restartedScheduler.getState(), ReminderState.ReminderVisible);
   assert.deepEqual(outputEvents, [
-    { type: ReminderOutputEventType.Show },
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    },
     { type: ReminderOutputEventType.Hide },
-    { type: ReminderOutputEventType.Show }
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.EyeRest
+    }
   ]);
 
   restartedScheduler.stop();
