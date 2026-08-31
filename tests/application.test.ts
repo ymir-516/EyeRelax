@@ -965,7 +965,7 @@ class FakeSettingsWindow implements SettingsWindowHandle
 {
   private closeListener: ((event: SettingsWindowCloseEvent) => void) | undefined;
   private destroyed = false;
-  readonly loadedSettings: Array<{ snoozeMinutes: number; autoStart: boolean }> = [];
+  readonly loadedSettings: ReminderSettings[] = [];
   showCount = 0;
   hideCount = 0;
   restoreCount = 0;
@@ -1000,7 +1000,7 @@ class FakeSettingsWindow implements SettingsWindowHandle
   /**
    * @brief 记录设置页面加载内容。
    */
-  load(settings: { snoozeMinutes: number; autoStart: boolean }): void
+  load(settings: ReminderSettings): void
   {
     this.loadedSettings.push({ ...settings });
   }
@@ -1088,10 +1088,10 @@ class FakeSettingsWindowHost implements SettingsWindowHost
 function verifySettingsWindowController(): void
 {
   const host = new FakeSettingsWindowHost();
-  let settings = { snoozeMinutes: 3, autoStart: true };
+  let settings: ReminderSettings = { ...DEFAULT_SETTINGS };
   const controller = new SettingsWindowController({
     host,
-    getSettings: (): { snoozeMinutes: number; autoStart: boolean } => ({ ...settings })
+    getSettings: (): ReminderSettings => ({ ...settings })
   });
 
   controller.show();
@@ -1100,7 +1100,11 @@ function verifySettingsWindowController(): void
   controller.start();
   controller.start();
   controller.show();
-  settings = { snoozeMinutes: 10, autoStart: false };
+  settings = {
+    ...DEFAULT_SETTINGS,
+    snoozeMinutes: 10,
+    autoStart: false
+  };
   controller.show();
 
   assert.equal(host.windows.length, 1);
@@ -1118,7 +1122,12 @@ function verifySettingsWindowController(): void
 
   const settingsWindow = host.windows[0];
   assert.deepEqual(settingsWindow.loadedSettings, [
-    { snoozeMinutes: 3, autoStart: true }
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: 20,
+      standingIntervalMinutes: 30
+    }
   ]);
   assert.equal(settingsWindow.showCount, 2);
   assert.equal(settingsWindow.focusCount, 2);

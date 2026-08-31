@@ -65,3 +65,21 @@ function verifyStandingReminderContent(): void
 }
 
 test("reminder page contains standing reminder content", verifyStandingReminderContent);
+
+/**
+ * @brief 验证设置页包含两类提醒的可配置间隔
+ */
+function verifyReminderIntervalSettings(): void
+{
+  const settingsPath = join(process.cwd(), "src", "renderer", "settings.html");
+  const settingsSource = readFileSync(settingsPath, "utf8");
+
+  assert.match(settingsSource, /id="eye-rest-interval"/);
+  assert.match(settingsSource, /name="eyeRestIntervalMinutes"/);
+  assert.match(settingsSource, /id="standing-interval"/);
+  assert.match(settingsSource, /name="standingIntervalMinutes"/);
+  assert.match(settingsSource, /min="1"/);
+  assert.match(settingsSource, /max="120"/);
+}
+
+test("settings page contains configurable reminder intervals", verifyReminderIntervalSettings);

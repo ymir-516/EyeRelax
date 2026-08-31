@@ -4,7 +4,7 @@ import type { ReminderSettings } from "../core/model.js";
  * @brief 设置窗口的固定初始尺寸。
  */
 export const SETTINGS_WINDOW_WIDTH = 460;
-export const SETTINGS_WINDOW_HEIGHT = 360;
+export const SETTINGS_WINDOW_HEIGHT = 420;
 
 /**
  * @brief 设置窗口创建所需的最小平台参数。

@@ -121,6 +121,8 @@ export type SystemEvent =
 export interface ReminderSettings {
   snoozeMinutes: number;
   autoStart: boolean;
+  eyeRestIntervalMinutes: number;
+  standingIntervalMinutes: number;
 }
 
 /**
@@ -128,5 +130,7 @@ export interface ReminderSettings {
  */
 export const DEFAULT_SETTINGS: Readonly<ReminderSettings> = Object.freeze({
   snoozeMinutes: 3,
-  autoStart: true
+  autoStart: true,
+  eyeRestIntervalMinutes: 20,
+  standingIntervalMinutes: 30
 });

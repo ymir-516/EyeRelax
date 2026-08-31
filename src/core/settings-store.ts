@@ -20,6 +20,16 @@ export const MIN_SNOOZE_MINUTES = 1;
 export const MAX_SNOOZE_MINUTES = 10;
 
 /**
+ * @brief 提醒周期允许使用的最小分钟数
+ */
+export const MIN_REMINDER_INTERVAL_MINUTES = 1;
+
+/**
+ * @brief 提醒周期允许使用的最大分钟数
+ */
+export const MAX_REMINDER_INTERVAL_MINUTES = 120;
+
+/**
  * @brief 描述设置存储需要的最小文件系统能力。
  *
  * 通过接口注入文件系统，设置校验和原子写入可以在 Linux 测试环境中
@@ -76,6 +86,34 @@ function isSettingsRecord(value: unknown): value is Record<string, unknown>
 }
 
 /**
+ * @brief 读取提醒周期配置，并为旧版缺失字段补充默认值
+ *
+ * 只有缺少字段时才使用默认值；显式提供的值仍必须通过完整范围校验。
+ */
+function readReminderInterval(
+  value: Record<string, unknown>,
+  name: "eyeRestIntervalMinutes" | "standingIntervalMinutes",
+  defaultValue: number
+): number
+{
+  if (!Object.prototype.hasOwnProperty.call(value, name))
+    return defaultValue;
+
+  const intervalMinutes = value[name];
+  if (
+    typeof intervalMinutes !== "number" ||
+    !Number.isInteger(intervalMinutes) ||
+    intervalMinutes < MIN_REMINDER_INTERVAL_MINUTES ||
+    intervalMinutes > MAX_REMINDER_INTERVAL_MINUTES
+  )
+    throw new SettingsValidationError(
+      `${name} must be an integer from 1 to 120`
+    );
+
+  return intervalMinutes;
+}
+
+/**
  * @brief 校验并复制设置值，确保调用方不能带入运行时状态字段。
  *
  * 持久化只接受本期定义的两个字段；计时器、推迟中的剩余时间、暂停状态
@@ -99,9 +137,22 @@ export function validateSettings(value: unknown): ReminderSettings
   if (typeof value.autoStart !== "boolean")
     throw new SettingsValidationError("autoStart must be a boolean");
 
+  const eyeRestIntervalMinutes = readReminderInterval(
+    value,
+    "eyeRestIntervalMinutes",
+    DEFAULT_SETTINGS.eyeRestIntervalMinutes
+  );
+  const standingIntervalMinutes = readReminderInterval(
+    value,
+    "standingIntervalMinutes",
+    DEFAULT_SETTINGS.standingIntervalMinutes
+  );
+
   return {
     snoozeMinutes,
-    autoStart: value.autoStart
+    autoStart: value.autoStart,
+    eyeRestIntervalMinutes,
+    standingIntervalMinutes
   };
 }
 
@@ -112,7 +163,9 @@ function cloneDefaultSettings(): ReminderSettings
 {
   return {
     snoozeMinutes: DEFAULT_SETTINGS.snoozeMinutes,
-    autoStart: DEFAULT_SETTINGS.autoStart
+    autoStart: DEFAULT_SETTINGS.autoStart,
+    eyeRestIntervalMinutes: DEFAULT_SETTINGS.eyeRestIntervalMinutes,
+    standingIntervalMinutes: DEFAULT_SETTINGS.standingIntervalMinutes
   };
 }
 

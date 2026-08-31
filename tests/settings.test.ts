@@ -103,12 +103,16 @@ async function verifyDefaultSettings(): Promise<void>
 
   assert.deepEqual(await fixture.store.load(), {
     snoozeMinutes: 3,
-    autoStart: true
+    autoStart: true,
+    eyeRestIntervalMinutes: 20,
+    standingIntervalMinutes: 30
   });
   assert.equal(fixture.fileSystem.directories.has("/test-user-data"), true);
   assert.deepEqual(JSON.parse(fixture.fileSystem.files.get(fixture.settingsPath) ?? "{}"), {
     snoozeMinutes: 3,
-    autoStart: true
+    autoStart: true,
+    eyeRestIntervalMinutes: 20,
+    standingIntervalMinutes: 30
   });
 }
 
@@ -119,22 +123,84 @@ async function verifySettingsValidation(): Promise<void>
 {
   const fixture = createStore();
 
-  assert.deepEqual(await fixture.store.save({ snoozeMinutes: 1, autoStart: false }), {
+  assert.deepEqual(await fixture.store.save({
     snoozeMinutes: 1,
-    autoStart: false
+    autoStart: false,
+    eyeRestIntervalMinutes: 1,
+    standingIntervalMinutes: 120
+  }), {
+    snoozeMinutes: 1,
+    autoStart: false,
+    eyeRestIntervalMinutes: 1,
+    standingIntervalMinutes: 120
   });
-  assert.deepEqual(await fixture.store.save({ snoozeMinutes: 10, autoStart: true }), {
+  assert.deepEqual(await fixture.store.save({
     snoozeMinutes: 10,
-    autoStart: true
+    autoStart: true,
+    eyeRestIntervalMinutes: 120,
+    standingIntervalMinutes: 1
+  }), {
+    snoozeMinutes: 10,
+    autoStart: true,
+    eyeRestIntervalMinutes: 120,
+    standingIntervalMinutes: 1
   });
 
   const invalidValues: unknown[] = [
-    { snoozeMinutes: 0, autoStart: true },
-    { snoozeMinutes: 11, autoStart: true },
-    { snoozeMinutes: 1.5, autoStart: true },
-    { snoozeMinutes: -1, autoStart: true },
-    { snoozeMinutes: "3", autoStart: true },
-    { snoozeMinutes: 3, autoStart: "true" },
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: 0,
+      standingIntervalMinutes: 30
+    },
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: 121,
+      standingIntervalMinutes: 30
+    },
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: 1.5,
+      standingIntervalMinutes: 30
+    },
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: "20",
+      standingIntervalMinutes: 30
+    },
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: 20,
+      standingIntervalMinutes: 0
+    },
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: 20,
+      standingIntervalMinutes: 121
+    },
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: 20,
+      standingIntervalMinutes: 1.5
+    },
+    {
+      snoozeMinutes: 3,
+      autoStart: true,
+      eyeRestIntervalMinutes: 20,
+      standingIntervalMinutes: "30"
+    },
+    { snoozeMinutes: 0, autoStart: true, eyeRestIntervalMinutes: 20, standingIntervalMinutes: 30 },
+    { snoozeMinutes: 11, autoStart: true, eyeRestIntervalMinutes: 20, standingIntervalMinutes: 30 },
+    { snoozeMinutes: 1.5, autoStart: true, eyeRestIntervalMinutes: 20, standingIntervalMinutes: 30 },
+    { snoozeMinutes: -1, autoStart: true, eyeRestIntervalMinutes: 20, standingIntervalMinutes: 30 },
+    { snoozeMinutes: "3", autoStart: true, eyeRestIntervalMinutes: 20, standingIntervalMinutes: 30 },
+    { snoozeMinutes: 3, autoStart: "true", eyeRestIntervalMinutes: 20, standingIntervalMinutes: 30 },
     null
   ];
 
@@ -155,6 +221,8 @@ async function verifyPersistenceAndAtomicReplace(): Promise<void>
   const saved = await fixture.store.save({
     snoozeMinutes: 4,
     autoStart: false,
+    eyeRestIntervalMinutes: 25,
+    standingIntervalMinutes: 45,
     timerState: "snoozed",
     remainingMilliseconds: 1000
   });
@@ -162,11 +230,15 @@ async function verifyPersistenceAndAtomicReplace(): Promise<void>
 
   assert.deepEqual(saved, {
     snoozeMinutes: 4,
-    autoStart: false
+    autoStart: false,
+    eyeRestIntervalMinutes: 25,
+    standingIntervalMinutes: 45
   });
   assert.deepEqual(await secondStore.load(), {
     snoozeMinutes: 4,
-    autoStart: false
+    autoStart: false,
+    eyeRestIntervalMinutes: 25,
+    standingIntervalMinutes: 45
   });
   assert.equal(fixture.fileSystem.files.has(`${fixture.settingsPath}.tmp`), false);
   assert.deepEqual(fixture.fileSystem.renamedFiles, [
@@ -187,7 +259,9 @@ async function verifyCorruptSettingsFallback(): Promise<void>
   fixture.fileSystem.seed(fixture.settingsPath, "{invalid-json");
   assert.deepEqual(await fixture.store.load(), {
     snoozeMinutes: 3,
-    autoStart: true
+    autoStart: true,
+    eyeRestIntervalMinutes: 20,
+    standingIntervalMinutes: 30
   });
 
   fixture.fileSystem.seed(
@@ -196,7 +270,29 @@ async function verifyCorruptSettingsFallback(): Promise<void>
   );
   assert.deepEqual(await fixture.store.load(), {
     snoozeMinutes: 3,
-    autoStart: true
+    autoStart: true,
+    eyeRestIntervalMinutes: 20,
+    standingIntervalMinutes: 30
+  });
+}
+
+/**
+ * @brief 旧版配置保留已有设置并补充提醒间隔默认值
+ */
+async function verifyLegacySettingsKeepExistingValues(): Promise<void>
+{
+  const fixture = createStore();
+
+  fixture.fileSystem.seed(
+    fixture.settingsPath,
+    JSON.stringify({ snoozeMinutes: 8, autoStart: false })
+  );
+
+  assert.deepEqual(await fixture.store.load(), {
+    snoozeMinutes: 8,
+    autoStart: false,
+    eyeRestIntervalMinutes: 20,
+    standingIntervalMinutes: 30
   });
 }
 
@@ -204,3 +300,4 @@ test("default settings are created on first load", verifyDefaultSettings);
 test("settings validation enforces the snooze range", verifySettingsValidation);
 test("settings persist through atomic replacement", verifyPersistenceAndAtomicReplace);
 test("corrupt settings fall back to defaults", verifyCorruptSettingsFallback);
+test("legacy settings keep existing values", verifyLegacySettingsKeepExistingValues);

@@ -603,9 +603,10 @@ export class ReminderScheduler
     if (this.isSchedulingPaused())
       return;
 
-    const delayMilliseconds = track.type === ReminderType.EyeRest
-      ? REMINDER_INTERVAL_MILLISECONDS
-      : STANDING_REMINDER_INTERVAL_MILLISECONDS;
+    const intervalMinutes = track.type === ReminderType.EyeRest
+      ? this.options.settings.eyeRestIntervalMinutes
+      : this.options.settings.standingIntervalMinutes;
+    const delayMilliseconds = intervalMinutes * MILLISECONDS_PER_MINUTE;
     this.scheduleTimer(
       track,
       delayMilliseconds,

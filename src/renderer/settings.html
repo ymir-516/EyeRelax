@@ -172,6 +172,10 @@
         min-width: 0;
       }
 
+      .field-row + .field-row {
+        margin-top: 8px;
+      }
+
       .field-label,
       .switch-title {
         display: block;
@@ -383,6 +387,48 @@
           </div>
           <div class="field-row">
             <div>
+              <label class="field-label" for="eye-rest-interval">护眼提醒间隔</label>
+              <p id="eye-rest-interval-hint" class="hint">每隔 1～120 分钟提醒一次，默认 20 分钟</p>
+            </div>
+            <div class="input-shell">
+              <input
+                id="eye-rest-interval"
+                name="eyeRestIntervalMinutes"
+                type="number"
+                min="1"
+                max="120"
+                step="1"
+                inputmode="numeric"
+                value="20"
+                required
+                aria-describedby="eye-rest-interval-hint"
+              >
+              <span>分钟</span>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
+              <label class="field-label" for="standing-interval">站立提醒间隔</label>
+              <p id="standing-interval-hint" class="hint">每隔 1～120 分钟提醒一次，默认 30 分钟</p>
+            </div>
+            <div class="input-shell">
+              <input
+                id="standing-interval"
+                name="standingIntervalMinutes"
+                type="number"
+                min="1"
+                max="120"
+                step="1"
+                inputmode="numeric"
+                value="30"
+                required
+                aria-describedby="standing-interval-hint"
+              >
+              <span>分钟</span>
+            </div>
+          </div>
+          <div class="field-row">
+            <div>
               <label class="field-label" for="snooze-minutes">推迟提醒时间</label>
               <p id="snooze-hint" class="hint">请输入 1～10 之间的整数，默认 3 分钟。</p>
             </div>
@@ -431,8 +477,14 @@
       const DEFAULT_SNOOZE_MINUTES = 3;
       const MIN_SNOOZE_MINUTES = 1;
       const MAX_SNOOZE_MINUTES = 10;
+      const DEFAULT_EYE_REST_INTERVAL_MINUTES = 20;
+      const DEFAULT_STANDING_INTERVAL_MINUTES = 30;
+      const MIN_REMINDER_INTERVAL_MINUTES = 1;
+      const MAX_REMINDER_INTERVAL_MINUTES = 120;
       const form = document.getElementById("settings-form");
       const snoozeMinutesInput = document.getElementById("snooze-minutes");
+      const eyeRestIntervalInput = document.getElementById("eye-rest-interval");
+      const standingIntervalInput = document.getElementById("standing-interval");
       const autoStartInput = document.getElementById("auto-start");
       const saveButton = document.getElementById("save");
       const message = document.getElementById("message");
@@ -443,6 +495,8 @@
       function readInitialSettings() {
         const query = new URLSearchParams(window.location.search);
         const snoozeMinutes = Number(query.get("snoozeMinutes"));
+        const eyeRestIntervalMinutes = Number(query.get("eyeRestIntervalMinutes"));
+        const standingIntervalMinutes = Number(query.get("standingIntervalMinutes"));
         const autoStart = query.get("autoStart");
 
         return {
@@ -451,6 +505,16 @@
             snoozeMinutes <= MAX_SNOOZE_MINUTES
             ? snoozeMinutes
             : DEFAULT_SNOOZE_MINUTES,
+          eyeRestIntervalMinutes: Number.isInteger(eyeRestIntervalMinutes) &&
+            eyeRestIntervalMinutes >= MIN_REMINDER_INTERVAL_MINUTES &&
+            eyeRestIntervalMinutes <= MAX_REMINDER_INTERVAL_MINUTES
+            ? eyeRestIntervalMinutes
+            : DEFAULT_EYE_REST_INTERVAL_MINUTES,
+          standingIntervalMinutes: Number.isInteger(standingIntervalMinutes) &&
+            standingIntervalMinutes >= MIN_REMINDER_INTERVAL_MINUTES &&
+            standingIntervalMinutes <= MAX_REMINDER_INTERVAL_MINUTES
+            ? standingIntervalMinutes
+            : DEFAULT_STANDING_INTERVAL_MINUTES,
           autoStart: autoStart !== "false"
         };
       }
@@ -460,6 +524,8 @@
        */
       function applySettings(settings) {
         snoozeMinutesInput.value = String(settings.snoozeMinutes);
+        eyeRestIntervalInput.value = String(settings.eyeRestIntervalMinutes);
+        standingIntervalInput.value = String(settings.standingIntervalMinutes);
         autoStartInput.checked = settings.autoStart;
       }
 
@@ -472,9 +538,39 @@
       }
 
       /**
+       * @brief 读取并校验提醒间隔输入
+       */
+      function readReminderInterval(input, label) {
+        const intervalMinutes = Number(input.value);
+        if (!Number.isInteger(intervalMinutes) ||
+            intervalMinutes < MIN_REMINDER_INTERVAL_MINUTES ||
+            intervalMinutes > MAX_REMINDER_INTERVAL_MINUTES) {
+          showMessage(`${label}必须是 1～120 分钟的整数`, true);
+          input.focus();
+          return undefined;
+        }
+
+        return intervalMinutes;
+      }
+
+      /**
        * @brief 在主进程再次校验前执行即时输入校验。
        */
       function readFormSettings() {
+        const eyeRestIntervalMinutes = readReminderInterval(
+          eyeRestIntervalInput,
+          "护眼提醒间隔"
+        );
+        if (eyeRestIntervalMinutes === undefined)
+          return undefined;
+
+        const standingIntervalMinutes = readReminderInterval(
+          standingIntervalInput,
+          "站立提醒间隔"
+        );
+        if (standingIntervalMinutes === undefined)
+          return undefined;
+
         const snoozeMinutes = Number(snoozeMinutesInput.value);
         if (!Number.isInteger(snoozeMinutes) ||
             snoozeMinutes < MIN_SNOOZE_MINUTES ||
@@ -486,6 +582,8 @@
 
         return {
           snoozeMinutes,
+          eyeRestIntervalMinutes,
+          standingIntervalMinutes,
           autoStart: autoStartInput.checked
         };
       }

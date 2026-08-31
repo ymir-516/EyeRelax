@@ -271,6 +271,8 @@ const electronSettingsWindowHost: SettingsWindowHost = {
           {
             query: {
               snoozeMinutes: String(settings.snoozeMinutes),
+              eyeRestIntervalMinutes: String(settings.eyeRestIntervalMinutes),
+              standingIntervalMinutes: String(settings.standingIntervalMinutes),
               autoStart: String(settings.autoStart)
             }
           }
@@ -615,6 +617,8 @@ async function startApplication(): Promise<void>
 
   runtimeSettings.snoozeMinutes = settings.snoozeMinutes;
   runtimeSettings.autoStart = settings.autoStart;
+  runtimeSettings.eyeRestIntervalMinutes = settings.eyeRestIntervalMinutes;
+  runtimeSettings.standingIntervalMinutes = settings.standingIntervalMinutes;
   startupManager.synchronize(settings.autoStart);
   applicationLifecycle.start();
 }
@@ -651,6 +655,8 @@ async function saveSettings(value: unknown): Promise<typeof runtimeSettings>
 
   runtimeSettings.snoozeMinutes = savedSettings.snoozeMinutes;
   runtimeSettings.autoStart = savedSettings.autoStart;
+  runtimeSettings.eyeRestIntervalMinutes = savedSettings.eyeRestIntervalMinutes;
+  runtimeSettings.standingIntervalMinutes = savedSettings.standingIntervalMinutes;
   return { ...runtimeSettings };
 }
 

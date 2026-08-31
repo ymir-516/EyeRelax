@@ -175,7 +175,9 @@ function verifyCoreModel(): void
   assert.deepEqual(Object.values(ReminderType), ["eye-rest", "standing"]);
   assert.deepEqual(DEFAULT_SETTINGS, {
     snoozeMinutes: 3,
-    autoStart: true
+    autoStart: true,
+    eyeRestIntervalMinutes: 20,
+    standingIntervalMinutes: 30
   });
 
   const commands: ReminderCommand[] = [
@@ -669,6 +671,76 @@ function verifyInvalidCommands(): void
 
 test("core model supports typed reminders", verifyCoreModel);
 test("independent reminder cycles", verifyIndependentReminderCycles);
+
+/**
+ * @brief 验证提醒间隔可配置且修改时不重置当前周期
+ */
+function verifyConfigurableReminderIntervals(): void
+{
+  const fixture = createSchedulerFixture();
+  fixture.settings.eyeRestIntervalMinutes = 7;
+  fixture.settings.standingIntervalMinutes = 11;
+
+  fixture.scheduler.start();
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
+    7 * MILLISECONDS_PER_MINUTE
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    11 * MILLISECONDS_PER_MINUTE
+  );
+
+  fixture.clock.advance(2 * MILLISECONDS_PER_MINUTE);
+  fixture.settings.eyeRestIntervalMinutes = 13;
+  fixture.settings.standingIntervalMinutes = 17;
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
+    5 * MILLISECONDS_PER_MINUTE
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    9 * MILLISECONDS_PER_MINUTE
+  );
+
+  fixture.clock.advance(5 * MILLISECONDS_PER_MINUTE);
+  fixture.timerScheduler.runDue();
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.EyeRest
+  );
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.EyeRest
+    }),
+    true
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
+    13 * MILLISECONDS_PER_MINUTE
+  );
+
+  fixture.clock.advance(4 * MILLISECONDS_PER_MINUTE);
+  fixture.timerScheduler.runDue();
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
+  );
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.Standing
+    }),
+    true
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    17 * MILLISECONDS_PER_MINUTE
+  );
+}
+
+test("reminder intervals are configurable without resetting active cycles", verifyConfigurableReminderIntervals);
 test("typed actions remain independent", verifyActionsRemainIndependent);
 test("due priority and queue deduplication", verifyDuePriorityAndQueueDeduplication);
 test("system pause keeps both remainders", verifySystemPauseKeepsBothRemainders);
