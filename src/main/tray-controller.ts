@@ -305,9 +305,21 @@ export class TrayController
       },
       { type: "separator" },
       {
-        label: "立即提醒",
+        label: "立即护眼",
         click: (): void => {
-          this.dispatch({ type: ReminderCommandType.RemindNow });
+          this.dispatch({
+            type: ReminderCommandType.RemindNow,
+            reminderType: ReminderType.EyeRest
+          });
+        }
+      },
+      {
+        label: "立即站立",
+        click: (): void => {
+          this.dispatch({
+            type: ReminderCommandType.RemindNow,
+            reminderType: ReminderType.Standing
+          });
         }
       },
       {

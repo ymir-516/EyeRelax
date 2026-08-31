@@ -680,9 +680,12 @@ function verifyTrayController(): void
   assert.equal(host.tray.toolTip, "系统暂停 | 护眼 04:01 | 站立 30:00");
   scheduler.systemPaused = false;
 
-  findTrayMenuItem(host.latestTemplate(), "立即提醒").click?.();
+  findTrayMenuItem(host.latestTemplate(), "立即护眼").click?.();
   assert.deepEqual(scheduler.commands, [
-    { type: ReminderCommandType.RemindNow }
+    {
+      type: ReminderCommandType.RemindNow,
+      reminderType: ReminderType.EyeRest
+    }
   ]);
 
   scheduler.state = ReminderState.Waiting;
@@ -693,10 +696,13 @@ function verifyTrayController(): void
   assert.equal(host.tray.toolTip, "已暂停 | 护眼已暂停 | 站立已暂停");
   assert.equal(findTrayMenuItem(host.latestTemplate(), "状态：已暂停").enabled, false);
 
-  findTrayMenuItem(host.latestTemplate(), "立即提醒").click?.();
+  findTrayMenuItem(host.latestTemplate(), "立即站立").click?.();
   assert.equal(scheduler.state, ReminderState.ReminderVisible);
   assert.deepEqual(scheduler.commands.slice(-1), [
-    { type: ReminderCommandType.RemindNow }
+    {
+      type: ReminderCommandType.RemindNow,
+      reminderType: ReminderType.Standing
+    }
   ]);
 
   scheduler.state = ReminderState.Paused;
@@ -1345,7 +1351,7 @@ function createApplicationIntegrationFixture(): ApplicationIntegrationFixture
  * @brief 验证完整应用流程只创建一个托盘、窗口和计时流程。
  *
  * 测试通过真实调度器和各窗口/平台控制器的内存宿主推进时间，覆盖正常周期、
- * 已休息、重复推迟、设置变更、暂停恢复、立即提醒、锁屏恢复和统一退出清理。
+ * 已休息、重复推迟、设置变更、暂停恢复、立即护眼和立即站立、锁屏恢复和统一退出清理。
  */
 function verifyApplicationIntegrationFlow(): void
 {
@@ -1378,7 +1384,7 @@ function verifyApplicationIntegrationFlow(): void
     ReminderType.EyeRest
   ]);
 
-  findTrayMenuItem(fixture.trayHost.latestTemplate(), "立即提醒").click?.();
+  findTrayMenuItem(fixture.trayHost.latestTemplate(), "立即护眼").click?.();
   assert.equal(fixture.reminderHost.windows.length, 1);
   assert.equal(fixture.reminderHost.windows[0].focusCount, 1);
 

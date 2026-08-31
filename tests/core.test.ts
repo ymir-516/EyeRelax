@@ -189,7 +189,10 @@ function verifyCoreModel(): void
       type: ReminderCommandType.Snooze,
       reminderType: ReminderType.Standing
     },
-    { type: ReminderCommandType.RemindNow },
+    {
+      type: ReminderCommandType.RemindNow,
+      reminderType: ReminderType.EyeRest
+    },
     { type: ReminderCommandType.Pause },
     { type: ReminderCommandType.Resume }
   ];
@@ -550,18 +553,24 @@ function verifyManualPauseKeepsQueue(): void
 }
 
 /**
- * @brief 验证立即提醒始终作用于护眼轨道。
+ * @brief 验证立即护眼只操作护眼提醒轨道。
  */
 function verifyImmediateEyeReminder(): void
 {
   const fixture = createSchedulerFixture();
   fixture.scheduler.start();
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.RemindNow }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.RemindNow,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.RemindNow }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.RemindNow,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
   assert.equal(
@@ -596,7 +605,10 @@ function verifyImmediateEyeReminder(): void
     ReminderType.Standing
   );
   assert.equal(
-    fixture.scheduler.dispatch({ type: ReminderCommandType.RemindNow }),
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.RemindNow,
+      reminderType: ReminderType.EyeRest
+    }),
     true
   );
   assert.deepEqual(fixture.scheduler.getPendingReminderTypes(), [
@@ -747,5 +759,58 @@ test("system pause keeps both remainders", verifySystemPauseKeepsBothRemainders)
 test("system pause keeps visible reminder", verifySystemPauseKeepsVisibleReminder);
 test("manual pause keeps pending queue", verifyManualPauseKeepsQueue);
 test("immediate reminder targets eye rest", verifyImmediateEyeReminder);
+
+/**
+ * @brief 验证立即站立只操作站立提醒轨道。
+ */
+function verifyImmediateStandingReminder(): void
+{
+  const fixture = createSchedulerFixture();
+  fixture.scheduler.start();
+
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.RemindNow,
+      reminderType: ReminderType.Standing
+    }),
+    true
+  );
+  assert.equal(
+    fixture.scheduler.getCurrentReminderType(),
+    ReminderType.Standing
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.EyeRest),
+    REMINDER_INTERVAL_MILLISECONDS
+  );
+  assert.deepEqual(fixture.events, [
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.Standing
+    }
+  ]);
+
+  assert.equal(
+    fixture.scheduler.dispatch({
+      type: ReminderCommandType.Complete,
+      reminderType: ReminderType.Standing
+    }),
+    true
+  );
+  assert.equal(
+    fixture.scheduler.getNextReminderRemainingMilliseconds(ReminderType.Standing),
+    STANDING_REMINDER_INTERVAL_MILLISECONDS
+  );
+  assert.deepEqual(fixture.events, [
+    {
+      type: ReminderOutputEventType.Show,
+      reminderType: ReminderType.Standing
+    },
+    { type: ReminderOutputEventType.Hide }
+  ]);
+}
+
+test("immediate reminder targets standing", verifyImmediateStandingReminder);
+
 test("restart starts fresh cycles", verifyRestartStartsFreshCycles);
 test("invalid scheduler commands", verifyInvalidCommands);

@@ -66,7 +66,10 @@ export type ReminderCommand =
       type: typeof ReminderCommandType.Snooze;
       reminderType: ReminderTypeValue;
     }
-  | { type: typeof ReminderCommandType.RemindNow }
+  | {
+      type: typeof ReminderCommandType.RemindNow;
+      reminderType: ReminderTypeValue;
+    }
   | { type: typeof ReminderCommandType.Pause }
   | { type: typeof ReminderCommandType.Resume };
 

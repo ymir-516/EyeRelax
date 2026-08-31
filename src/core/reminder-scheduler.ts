@@ -222,8 +222,7 @@ export class ReminderScheduler
   /**
    * @brief 分发用户操作。
    *
-   * 完成和延迟必须携带提醒类型；立即提醒保持原有语义，只作用于护眼
-   * 轨道，不提供单独的立即站立提醒入口。
+   * 完成、推迟和立即提醒命令均按提醒类型分别处理。
    * @return 操作是否被当前状态接受。
    */
   dispatch(command: ReminderCommand): boolean
@@ -237,7 +236,7 @@ export class ReminderScheduler
       case ReminderCommandType.Snooze:
         return this.snoozeReminder(command.reminderType);
       case ReminderCommandType.RemindNow:
-        return this.remindNow();
+        return this.remindNow(command.reminderType);
       case ReminderCommandType.Pause:
         return this.pauseReminder();
       case ReminderCommandType.Resume:
@@ -369,39 +368,39 @@ export class ReminderScheduler
   }
 
   /**
-   * @brief 立即触发护眼提醒。
+   * @brief 立即触发指定类型的提醒。
    *
    * 若站立弹窗正在展示，护眼提醒排到队首，避免两个提醒争用同一个
    * 窗口；若护眼弹窗已展示，则只将它置于前台。
    */
-  private remindNow(): boolean
+  private remindNow(reminderType: ReminderTypeValue): boolean
   {
-    const eyeTrack = this.getTrack(ReminderType.EyeRest);
-    if (this.visibleReminderType === ReminderType.EyeRest) {
+    const track = this.getTrack(reminderType);
+    if (this.visibleReminderType === reminderType) {
       this.emit({
         type: ReminderOutputEventType.BringToFront,
-        reminderType: ReminderType.EyeRest
+        reminderType
       });
       return true;
     }
 
     if (this.visibleReminderType !== undefined) {
-      this.enqueueReminder(ReminderType.EyeRest);
-      this.movePendingReminderToFront(ReminderType.EyeRest);
+      this.enqueueReminder(reminderType);
+      this.movePendingReminderToFront(reminderType);
       return true;
     }
 
     if (
-      eyeTrack.state !== ReminderState.Waiting &&
-      eyeTrack.state !== ReminderState.Snoozed &&
-      eyeTrack.state !== ReminderState.Paused &&
-      eyeTrack.state !== ReminderState.Queued
+      track.state !== ReminderState.Waiting &&
+      track.state !== ReminderState.Snoozed &&
+      track.state !== ReminderState.Paused &&
+      track.state !== ReminderState.Queued
     )
       return false;
 
-    this.cancelTrackTimer(eyeTrack);
-    eyeTrack.pausedRemainingMilliseconds = undefined;
-    this.presentReminder(ReminderType.EyeRest);
+    this.cancelTrackTimer(track);
+    track.pausedRemainingMilliseconds = undefined;
+    this.presentReminder(reminderType);
     return true;
   }
 
